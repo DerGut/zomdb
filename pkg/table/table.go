@@ -61,18 +61,21 @@ func (t *Table) Get(primaryKey []byte) (*Row, error) {
 	// Run a sequential scan
 	var off int64
 	for {
-		n, err := t.log.ReadAt(buf, int64(off))
+		n, err := t.log.ReadAt(buf, off)
 		if err != nil {
 			// We try to read a fixed-size buffer, so an EOF can also
-			// occur after the value we want to retrieve
-			if !errors.Is(err, io.EOF) {
-				return nil, fmt.Errorf("read at %d: %w", off, err)
+			// occur after the bytes we are interested in
+			// If it occurs right away, we hit the end of the log
+			if errors.Is(err, io.EOF) && n == 0 {
+				return nil, ErrNotFound
 			}
+
+			return nil, fmt.Errorf("read at %d: %w", off, err)
 		}
 
 		// At minimum, we encode two uint32 size values for each key-value pair
 		if n < 8 {
-			return nil, ErrCorruptData
+			return nil, fmt.Errorf("row doesn't fit sizes: %d: %w", off, ErrCorruptData)
 		}
 
 		keySize := binary.BigEndian.Uint32(buf[:4])
@@ -81,22 +84,23 @@ func (t *Table) Get(primaryKey []byte) (*Row, error) {
 		if int(keySize) != len(primaryKey) {
 			// If the key size doesn't match, we already know that this
 			// isn't the right value
-			off += int64(keySize) + int64(valSize) + 8
+			off += 8 + int64(keySize) + int64(valSize)
 			continue
 		}
 
 		if n < int(8+keySize) {
 			// We reached EOF before reading the entire key
-			return nil, ErrCorruptData
+			return nil, fmt.Errorf("row doesn't fit key: %d: %w", off, ErrCorruptData)
 		}
 
-		// key doesn't fit into current buffer
-		if keySize > bufSize-8 {
-			// new buffer includes the full length of the key and val
-			missingBufSize := (keySize + valSize) - bufSize + 8
+		// If row didn't fit into the buffer
+		// TODO: track this to optimize default buffer size
+		rowSize := 8 + keySize + valSize
+		if rowSize > bufSize {
+			missingBufSize := rowSize - bufSize
 			extdBuf := make([]byte, missingBufSize)
 
-			// Start at current offset + len of first buffer
+			// Start at current offset - len of first buffer
 			newOff := off + bufSize
 			if _, err := t.log.ReadAt(extdBuf, newOff); err != nil {
 				if errors.Is(err, io.EOF) {
@@ -114,7 +118,7 @@ func (t *Table) Get(primaryKey []byte) (*Row, error) {
 
 		if bytes.Compare(primaryKey, foundKey) != 0 {
 			// Key mismatch
-			off += int64(keySize) + int64(valSize) + 8
+			off += 8 + int64(keySize) + int64(valSize)
 			continue
 		}
 
