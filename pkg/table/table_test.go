@@ -119,6 +119,20 @@ func TestTable(t *testing.T) {
 			},
 		},
 		{
+			name: "get k1 -> not found",
+			ops: []struct {
+				op  string
+				row Row
+				err error
+			}{
+				{
+					op:  get,
+					row: Row{PrimaryKey: []byte("not exist")},
+					err: ErrNotFound,
+				},
+			},
+		},
+		{
 			name: "keySize > buffer",
 			ops: []struct {
 				op  string
@@ -195,12 +209,12 @@ func TestTable(t *testing.T) {
 				case "put":
 					err := tbl.Put(&op.row)
 					if !errors.Is(err, op.err) {
-						t.Fatalf("Expected %s, got %s\n", op.err, err)
+						t.Fatalf("Expected err \"%v\", got \"%v\"\n", op.err, err)
 					}
 				case "get":
 					row, err := tbl.Get(op.row.PrimaryKey)
 					if !errors.Is(err, op.err) {
-						t.Fatalf("Expected %s, got %s\n", op.err, err)
+						t.Fatalf("Expected err \"%v\", got \"%v\"\n", op.err, err)
 					}
 					if bytes.Compare(op.row.Data, row.Data) != 0 {
 						t.Fatalf("Expected \"%s\" got \"%s\"\n", op.row.Data, row.Data)

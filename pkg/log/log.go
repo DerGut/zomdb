@@ -29,7 +29,7 @@ var errNoNew = errors.New("use log.New() to create a Log")
 type Log struct {
 	fs afero.Fs
 
-	currentOffset int64
+	size int64
 
 	segments []segment
 	lock     sync.Mutex
@@ -63,7 +63,7 @@ func (l *Log) ReadAt(b []byte, off int64) (int, error) {
 		return 0, errNoNew
 	}
 
-	if off > l.currentOffset {
+	if off > l.size {
 		return 0, fmt.Errorf("no segment with offset: %w", io.EOF)
 	}
 
@@ -95,20 +95,20 @@ func (l *Log) Write(p []byte) (int, error) {
 		return n, fmt.Errorf("write: %w", err)
 	}
 
-	l.currentOffset += int64(n)
+	l.size += int64(n)
 
 	return n, nil
 }
 
+// Append appends the content to the most recent log file and
+// returns the updated current offset on success.
 func (l *Log) Append(content []byte) (off int64, err error) {
 	n, err := l.Write(content)
 	if err != nil {
 		return 0, fmt.Errorf("write: %w", err)
 	}
 
-	startOff := l.currentOffset - int64(n)
-
-	return startOff, nil
+	return l.size - int64(n), nil
 }
 
 func (l *Log) Close() error {
@@ -133,7 +133,7 @@ func (l *Log) rotate() error {
 
 	// Prepend new segment
 	l.segments = append([]segment{{
-		startOff: l.currentOffset,
+		startOff: l.size,
 		file:     f,
 	}}, l.segments...)
 
