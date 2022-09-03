@@ -2,6 +2,7 @@ package table
 
 import (
 	"bytes"
+	"encoding"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -26,12 +27,6 @@ var (
 
 type Table struct {
 	log *log.Log
-
-}
-
-type Row struct {
-	PrimaryKey []byte
-	Data       []byte
 }
 
 func New(fs afero.Fs) (*Table, error) {
@@ -45,31 +40,14 @@ func New(fs afero.Fs) (*Table, error) {
 	}, nil
 }
 
-// Data layout:
-// uint32 keySize
-// uint32 valSize
-// varbyte key
-// avrbyte val
-func (t *Table) Put(key, value []byte) error {
-	data := make([]byte, len(key)+len(value)+8)
-
 func (t *Table) Put(row *Row) error {
-	if err := ValidateRow(row); err != nil {
-		return fmt.Errorf("validate row: %w", err)
+	data, err := row.MarshalBinary()
+	if err != nil {
+		return fmt.Errorf("encode row: %w", err)
 	}
 
-	keySize := len(row.PrimaryKey)
-	valSize := len(row.Data)
-	data := make([]byte, keySize+valSize+8)
-
-	// Encode row
-	binary.BigEndian.PutUint32(data[:4], uint32(keySize))
-	binary.BigEndian.PutUint32(data[4:8], uint32(valSize))
-	copy(data[8:8+keySize], row.PrimaryKey)
-	copy(data[8+keySize:], row.Data)
-
-	if err := binary.Write(t.log, binary.BigEndian, data); err != nil {
-		return fmt.Errorf("write to log: %w", err)
+	if _, err := t.log.Append(data); err != nil {
+		return fmt.Errorf("append to log: %w", err)
 	}
 
 	return nil
@@ -145,6 +123,32 @@ func (t *Table) Get(primaryKey []byte) (*Row, error) {
 			Data:       buf[8+keySize : 8+keySize+valSize],
 		}, nil
 	}
+}
+
+type Row struct {
+	PrimaryKey []byte
+	Data       []byte
+}
+
+var _ encoding.BinaryMarshaler = &Row{}
+
+func (r *Row) MarshalBinary() ([]byte, error) {
+	if err := ValidateRow(r); err != nil {
+		return nil, fmt.Errorf("validate: %w", err)
+	}
+
+	keySize := len(r.PrimaryKey)
+	valSize := len(r.Data)
+
+	data := make([]byte, keySize+valSize+8)
+
+	// Encode row
+	binary.BigEndian.PutUint32(data[:4], uint32(keySize))
+	binary.BigEndian.PutUint32(data[4:8], uint32(valSize))
+	copy(data[8:8+keySize], r.PrimaryKey)
+	copy(data[8+keySize:], r.Data)
+
+	return data, nil
 }
 
 func ValidateRow(row *Row) error {
