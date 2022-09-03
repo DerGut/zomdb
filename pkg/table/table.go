@@ -7,14 +7,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 
 	"github.com/DerGut/zomdb/pkg/log"
 	"github.com/spf13/afero"
 )
 
 var (
-	MaxPrimaryKeySize = 2 ^ 32 - 1
-	MaxDataSize       = 2 ^ 32 - 1
+	MaxPrimaryKeySize = math.MaxUint32
+	MaxDataSize       = math.MaxUint32
 )
 
 var (
