@@ -12,12 +12,26 @@ import (
 )
 
 var (
+	MaxPrimaryKeySize = 2 ^ 32 - 1
+	MaxDataSize       = 2 ^ 32 - 1
+)
+
+var (
 	ErrNotFound    = errors.New("not found")
 	ErrCorruptData = errors.New("data is corruped")
+
+	ErrPrimaryKeyTooLarge = errors.New("primary key too large")
+	ErrDataTooLarge       = errors.New("data too large")
 )
 
 type Table struct {
 	log *log.Log
+
+}
+
+type Row struct {
+	PrimaryKey []byte
+	Data       []byte
 }
 
 func New(fs afero.Fs) (*Table, error) {
@@ -39,11 +53,20 @@ func New(fs afero.Fs) (*Table, error) {
 func (t *Table) Put(key, value []byte) error {
 	data := make([]byte, len(key)+len(value)+8)
 
-	// Encode key value
-	binary.BigEndian.PutUint32(data[:4], uint32(len(key)))
-	binary.BigEndian.PutUint32(data[4:8], uint32(len(value)))
-	copy(data[8:8+len(key)], key)
-	copy(data[8+len(key):], value)
+func (t *Table) Put(row *Row) error {
+	if err := ValidateRow(row); err != nil {
+		return fmt.Errorf("validate row: %w", err)
+	}
+
+	keySize := len(row.PrimaryKey)
+	valSize := len(row.Data)
+	data := make([]byte, keySize+valSize+8)
+
+	// Encode row
+	binary.BigEndian.PutUint32(data[:4], uint32(keySize))
+	binary.BigEndian.PutUint32(data[4:8], uint32(valSize))
+	copy(data[8:8+keySize], row.PrimaryKey)
+	copy(data[8+keySize:], row.Data)
 
 	if err := binary.Write(t.log, binary.BigEndian, data); err != nil {
 		return fmt.Errorf("write to log: %w", err)
@@ -52,9 +75,9 @@ func (t *Table) Put(key, value []byte) error {
 	return nil
 }
 
-const bufSize = 1024
+func (t *Table) Get(primaryKey []byte) (*Row, error) {
+	const bufSize = 1024
 
-func (t *Table) Get(key []byte) ([]byte, error) {
 	buf := make([]byte, bufSize)
 
 	// Run a sequential scan
@@ -77,7 +100,7 @@ func (t *Table) Get(key []byte) ([]byte, error) {
 		keySize := binary.BigEndian.Uint32(buf[:4])
 		valSize := binary.BigEndian.Uint32(buf[4:8])
 
-		if int(keySize) != len(key) {
+		if int(keySize) != len(primaryKey) {
 			// If the key size doesn't match, we already know that this
 			// isn't the right value
 			off += int64(keySize) + int64(valSize) + 8
@@ -109,17 +132,33 @@ func (t *Table) Get(key []byte) ([]byte, error) {
 			buf = append(buf, extdBuf...)
 		}
 
-		curKey := buf[8 : 8+keySize]
+		foundKey := buf[8 : 8+keySize]
 
-		if bytes.Compare(key, curKey) != 0 {
+		if bytes.Compare(primaryKey, foundKey) != 0 {
 			// Key mismatch
 			off += int64(keySize) + int64(valSize) + 8
 			continue
 		}
 
-		// Key match
-		value := buf[8+keySize : 8+keySize+valSize]
-
-		return value, nil
+		return &Row{
+			PrimaryKey: primaryKey,
+			Data:       buf[8+keySize : 8+keySize+valSize],
+		}, nil
 	}
+}
+
+func ValidateRow(row *Row) error {
+	if row == nil {
+		return errors.New("nil row")
+	}
+
+	if len(row.PrimaryKey) > MaxPrimaryKeySize {
+		return ErrPrimaryKeyTooLarge
+	}
+
+	if len(row.Data) > MaxDataSize {
+		return ErrDataTooLarge
+	}
+
+	return nil
 }
