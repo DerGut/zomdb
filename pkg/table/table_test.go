@@ -216,7 +216,7 @@ func TestTable(t *testing.T) {
 					if !errors.Is(err, op.err) {
 						t.Fatalf("Expected err \"%v\", got \"%v\"\n", op.err, err)
 					}
-					if bytes.Compare(op.row.Data, row.Data) != 0 {
+					if row != nil && !bytes.Equal(op.row.Data, row.Data) {
 						t.Fatalf("Expected \"%s\" got \"%s\"\n", op.row.Data, row.Data)
 					}
 				default:

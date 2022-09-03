@@ -59,16 +59,19 @@ func (t *Table) Get(primaryKey []byte) (*Row, error) {
 
 	buf := make([]byte, bufSize)
 
-	// Run a sequential scan
+	var match *Row
 	var off int64
+
+	// Run a sequential scan
 	for {
 		n, err := t.log.ReadAt(buf, off)
 		if err != nil {
-			// We try to read a fixed-size buffer, so an EOF can also
-			// occur after the bytes we are interested in
-			// If it occurs right away, we hit the end of the log
+			// We try to read a fixed-size buffer, so an EOF can
+			// occur even though all the data we want has been read
+			// successfully
 			if errors.Is(err, io.EOF) && n == 0 {
-				return nil, ErrNotFound
+				// If it occurs right away, we hit the end of the log
+				break
 			}
 
 			return nil, fmt.Errorf("read at %d: %w", off, err)
@@ -89,11 +92,6 @@ func (t *Table) Get(primaryKey []byte) (*Row, error) {
 			continue
 		}
 
-		if n < int(8+keySize) {
-			// We reached EOF before reading the entire key
-			return nil, fmt.Errorf("row doesn't fit key: %d: %w", off, ErrCorruptData)
-		}
-
 		// If row didn't fit into the buffer
 		// TODO: track this to optimize default buffer size
 		rowSize := 8 + keySize + valSize
@@ -101,7 +99,7 @@ func (t *Table) Get(primaryKey []byte) (*Row, error) {
 			missingBufSize := rowSize - bufSize
 			extdBuf := make([]byte, missingBufSize)
 
-			// Start at current offset - len of first buffer
+			// Start at current offset + len of first buffer
 			newOff := off + bufSize
 			if _, err := t.log.ReadAt(extdBuf, newOff); err != nil {
 				if errors.Is(err, io.EOF) {
@@ -117,17 +115,29 @@ func (t *Table) Get(primaryKey []byte) (*Row, error) {
 
 		foundKey := buf[8 : 8+keySize]
 
-		if bytes.Compare(primaryKey, foundKey) != 0 {
+		if !bytes.Equal(primaryKey, foundKey) {
 			// Key mismatch
 			off += 8 + int64(keySize) + int64(valSize)
 			continue
 		}
 
-		return &Row{
-			PrimaryKey: primaryKey,
-			Data:       buf[8+keySize : 8+keySize+valSize],
-		}, nil
+		// Save the match but continue through the rest of the log (most recent wins)
+		row := Row{
+			PrimaryKey: make([]byte, len(primaryKey)),
+			Data:       make([]byte, valSize),
+		}
+		copy(row.PrimaryKey, primaryKey)
+		copy(row.Data, buf[8+keySize:8+keySize+valSize])
+
+		off += int64(rowSize)
+		match = &row
 	}
+
+	if match == nil {
+		return nil, ErrNotFound
+	}
+
+	return match, nil
 }
 
 type Row struct {
