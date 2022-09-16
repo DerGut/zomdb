@@ -191,7 +191,7 @@ func TestTable(t *testing.T) {
 						PrimaryKey: make([]byte, MaxPrimaryKeySize+1),
 						Data:       []byte("hallo"),
 					},
-					err: ErrPrimaryKeyTooLarge,
+					err: ErrInvalidKey,
 				},
 			},
 		},
@@ -233,27 +233,54 @@ func FuzzTable(f *testing.F) {
 		f.Fatal(err)
 	}
 
-	f.Fuzz(func(t *testing.T, key []byte, data []byte) {
+	f.Fuzz(func(t *testing.T, key, data []byte) {
 		row := Row{
 			PrimaryKey: key,
 			Data:       data,
 		}
 
 		if err := tbl.Put(&row); err != nil {
+			if errors.Is(err, ErrInvalidKey) {
+				t.SkipNow()
+			}
+
+			if errors.Is(err, ErrInvalidData) {
+				t.SkipNow()
+			}
+
 			t.Fatal(err)
 		}
 
 		result, err := tbl.Get(key)
 		if err != nil {
+			if errors.Is(err, ErrInvalidKey) {
+				t.SkipNow()
+			}
+
 			t.Fatal(err)
 		}
 
-		if bytes.Compare(data, result.Data) != 0 {
-			t.Fatalf("Expected \"%s\" got \"%s\"\n", data, result.Data)
+		if (err == nil) == (result == nil) {
+			t.Fail()
 		}
 
-		if bytes.Compare(key, result.PrimaryKey) != 0 {
-			t.Fatalf("Expected \"%s\" got \"%s\"\n", key, result.PrimaryKey)
+		if len(data) != len(result.Data) {
+			t.Fail()
+		}
+
+		for i := range data {
+			if data[i] != result.Data[i] {
+				t.Fatalf("data[%d] == %v != %v == result.Data[%d]\n", i, data[i], result.Data[i], i)
+			}
+		}
+
+		if !bytes.Equal(data, result.Data) {
+			t.Logf("len(expected): %d, len(got): %d\n", len(data), len(result.Data))
+			t.Fatalf("Expected \"%v\" got \"%v\"\n", data, result.Data)
+		}
+
+		if !bytes.Equal(key, result.PrimaryKey) {
+			t.Fatalf("Expected \"%v\" got \"%v\"\n", key, result.PrimaryKey)
 		}
 	})
 }

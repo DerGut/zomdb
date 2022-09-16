@@ -22,8 +22,8 @@ var (
 	ErrNotFound    = errors.New("not found")
 	ErrCorruptData = errors.New("data is corruped")
 
-	ErrPrimaryKeyTooLarge = errors.New("primary key too large")
-	ErrDataTooLarge       = errors.New("data too large")
+	ErrInvalidKey  = errors.New("invalid key")
+	ErrInvalidData = errors.New("invalid data")
 )
 
 type Table struct {
@@ -56,6 +56,10 @@ func (t *Table) Put(row *Row) error {
 
 func (t *Table) Get(primaryKey []byte) (*Row, error) {
 	const bufSize = 1024
+
+	if err := validateKey(primaryKey); err != nil {
+		return nil, fmt.Errorf("validate key: %w", err)
+	}
 
 	buf := make([]byte, bufSize)
 
@@ -171,12 +175,28 @@ func ValidateRow(row *Row) error {
 		return errors.New("nil row")
 	}
 
-	if len(row.PrimaryKey) > MaxPrimaryKeySize {
-		return ErrPrimaryKeyTooLarge
+	if err := validateKey(row.PrimaryKey); err != nil {
+		return err
+	}
+
+	if len(row.Data) == 0 {
+		return ErrInvalidData
 	}
 
 	if len(row.Data) > MaxDataSize {
-		return ErrDataTooLarge
+		return fmt.Errorf("len(data) > MaxDataSize: %w", ErrInvalidData)
+	}
+
+	return nil
+}
+
+func validateKey(key []byte) error {
+	if len(key) == 0 {
+		return ErrInvalidKey
+	}
+
+	if len(key) > MaxPrimaryKeySize {
+		return fmt.Errorf("key too large: %w", ErrInvalidKey)
 	}
 
 	return nil
