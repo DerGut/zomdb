@@ -1,6 +1,7 @@
 package log
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -33,7 +34,11 @@ type Log struct {
 
 	segments []segment
 	lock     sync.Mutex
+
+	compact CompactionFunc
 }
+
+type CompactionFunc func(r io.Reader) (bytes.Buffer, error)
 
 type segment struct {
 	startOff int64
@@ -122,6 +127,37 @@ func (l *Log) Close() error {
 
 	return lastErr
 }
+
+// // Compact should leave files of a certain maxSize
+// func (l *Log) Compact() error {
+// 	if len(l.segments) <= 1 {
+// 		// Current segment is still in use
+// 		return nil
+// 	}
+
+// 	// Compact individual segments
+// 	for i, segment := range l.segments[1:] {
+// 		compacted, err := l.compact(segment.file)
+// 		if err != nil {
+// 			return fmt.Errorf("compact segment %s: %w", segment.file.Name(), err)
+// 		}
+
+// 		name := filename(time.Now())
+
+// 		f, err := l.fs.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0655)
+// 		if err != nil {
+// 			return fmt.Errorf("open new file: %w", err)
+// 		}
+
+// 		// update offsets
+// 		l.lock.Lock()
+// 		l.segments = append(l.segments[:i], segment{
+// 			segment.startOff,
+// 			file: f,
+// 		})
+// 	}
+// 	return nil
+// }
 
 func (l *Log) rotate() error {
 	name := filename(time.Now())
