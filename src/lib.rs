@@ -14,13 +14,18 @@ trait Index {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn open_heap(file_name: *const libc::c_char) -> *mut Heap {
+pub unsafe extern "C" fn create_heap(file_name: *const libc::c_char) -> *mut Heap {
     let file_name_cstr = unsafe { CStr::from_ptr(file_name) };
     let file_name_str = file_name_cstr.to_str().unwrap();
 
     println!("opening heap file: {}", file_name_str);
 
-    let file = fs::File::open(file_name_str).unwrap();
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(file_name_str)
+        .unwrap();
     let heap = Box::new(Heap::new(file));
 
     unsafe { transmute(heap) }
