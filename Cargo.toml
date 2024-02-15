@@ -1,0 +1,18 @@
+[package]
+name = "zomdb"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# A dynamic system library will be produced. This is used when compiling a
+# dynamic library to be loaded from another language. This output type will
+# create *.so files on Linux, *.dylib files on macOS, and *.dll files on Windows.
+crate_type = ["cdylib"]
+
+[build-dependencies]
+cbindgen = "0.26.0"
+
+[dependencies]
+libc = "0.2.153"
