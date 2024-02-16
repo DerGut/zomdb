@@ -1,7 +1,7 @@
 use std::{
     ffi::CStr,
     fs,
-    io::{self, BufRead, Error, Write},
+    io::{self, BufRead, Error, Seek, Write},
     mem::transmute,
 };
 
@@ -10,7 +10,7 @@ const MAX_VALUE_SIZE: usize = 1024;
 
 trait Index {
     fn put(&mut self, key: &str, value: &str) -> Result<(), Error>;
-    fn get(&self, key: &str) -> Result<Option<String>, Error>;
+    fn get(&mut self, key: &str) -> Result<Option<String>, Error>;
 }
 
 #[no_mangle]
@@ -32,11 +32,8 @@ pub unsafe extern "C" fn create_heap(file_name: *const libc::c_char) -> *mut Hea
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn heap_get(
-    ptr: *const Heap,
-    key: *const libc::c_char,
-) -> *const libc::c_char {
-    let heap = unsafe { &*ptr };
+pub unsafe extern "C" fn heap_get(ptr: *mut Heap, key: *const libc::c_char) -> *const libc::c_char {
+    let heap = unsafe { &mut *ptr };
     let key_cstr = unsafe { CStr::from_ptr(key) };
     let key_str = key_cstr.to_str().unwrap();
 
@@ -126,7 +123,8 @@ impl Index for Heap {
         self.file.write_all(bytes.as_slice())
     }
 
-    fn get(&self, key: &str) -> Result<Option<String>, Error> {
+    fn get(&mut self, key: &str) -> Result<Option<String>, Error> {
+        self.file.rewind()?;
         let reader = io::BufReader::new(&self.file);
 
         // TODO: Read the file in reverse line by line instead of reading
@@ -157,6 +155,7 @@ mod test {
         io::{Read, Seek},
         vec,
     };
+    use tempfile::tempfile;
 
     use super::*;
 
@@ -178,33 +177,22 @@ mod test {
 
     #[test]
     fn test_heap_get() {
-        let mut heap_file = fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open("test_heap_get")
-            .unwrap();
+        let mut heap_file = tempfile().unwrap();
 
         heap_file
             .write_all(&Heap::serialize("key", "value"))
             .unwrap();
         heap_file.rewind().unwrap();
 
-        let heap = Heap::new(heap_file);
+        let mut heap = Heap::new(heap_file);
         let value = heap.get("key").unwrap();
 
-        fs::remove_file("test_heap_get").unwrap();
         assert_eq!(value, Some("value".to_string()));
     }
 
     #[test]
     fn test_heap_put() {
-        let heap_file = fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open("test_heap_put")
-            .unwrap();
+        let heap_file = tempfile().unwrap();
 
         let mut heap = Heap::new(heap_file);
         heap.put("key", "value").unwrap();
@@ -214,10 +202,20 @@ mod test {
         let mut buf = Vec::new();
         heap.file.read_to_end(&mut buf).unwrap();
 
-        fs::remove_file("test_heap_put").unwrap();
         assert_eq!(
             buf,
             vec![3, 0, 5, b'k', b'e', b'y', b'v', b'a', b'l', b'u', b'e']
         );
+    }
+
+    #[test]
+    fn test_heap_put_get() {
+        let heap_file = tempfile().unwrap();
+        let mut heap = Heap::new(heap_file);
+
+        heap.put("key", "value").unwrap();
+        let value = heap.get("key").unwrap();
+
+        assert_eq!(value, Some("value".to_string()));
     }
 }
