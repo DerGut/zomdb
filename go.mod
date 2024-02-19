@@ -1,6 +1,6 @@
 module github.com/DerGut/zomdb
 
-go 1.18
+go 1.22
 
 require github.com/spf13/afero v1.9.2
 
