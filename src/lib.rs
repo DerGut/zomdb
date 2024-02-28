@@ -1,6 +1,5 @@
 use std::{
-    ffi::CStr,
-    fs,
+    ffi, fs,
     io::{self, BufRead, Error, Seek, Write},
     mem::transmute,
 };
@@ -14,8 +13,8 @@ trait Index {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn create_heap(file_name: *const libc::c_char) -> *mut Heap {
-    let file_name_cstr = unsafe { CStr::from_ptr(file_name) };
+pub unsafe extern "C" fn create_heap(file_name: *const ffi::c_char) -> *mut Heap {
+    let file_name_cstr = unsafe { ffi::CStr::from_ptr(file_name) };
     let file_name_str = file_name_cstr.to_str().unwrap();
 
     println!("opening heap file: {}", file_name_str);
@@ -32,15 +31,15 @@ pub unsafe extern "C" fn create_heap(file_name: *const libc::c_char) -> *mut Hea
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn heap_get(ptr: *mut Heap, key: *const libc::c_char) -> *const libc::c_char {
+pub unsafe extern "C" fn heap_get(ptr: *mut Heap, key: *const ffi::c_char) -> *const ffi::c_char {
     let heap = unsafe { &mut *ptr };
-    let key_cstr = unsafe { CStr::from_ptr(key) };
+    let key_cstr = unsafe { ffi::CStr::from_ptr(key) };
     let key_str = key_cstr.to_str().unwrap();
 
     let value = heap.get(key_str).unwrap();
     match value {
         Some(value) => {
-            let value_cstr = std::ffi::CString::new(value).unwrap();
+            let value_cstr = ffi::CString::new(value).unwrap();
             value_cstr.into_raw()
         }
         None => std::ptr::null(),
@@ -50,13 +49,13 @@ pub unsafe extern "C" fn heap_get(ptr: *mut Heap, key: *const libc::c_char) -> *
 #[no_mangle]
 pub unsafe extern "C" fn heap_set(
     ptr: *mut Heap,
-    key: *const libc::c_char,
-    value: *const libc::c_char,
+    key: *const ffi::c_char,
+    value: *const ffi::c_char,
 ) {
     let heap = unsafe { &mut *ptr };
-    let key_cstr = unsafe { CStr::from_ptr(key) };
+    let key_cstr = unsafe { ffi::CStr::from_ptr(key) };
     let key_str = key_cstr.to_str().unwrap();
-    let value_cstr = unsafe { CStr::from_ptr(value) };
+    let value_cstr = unsafe { ffi::CStr::from_ptr(value) };
     let value_str = value_cstr.to_str().unwrap();
 
     heap.put(key_str, value_str).unwrap();
