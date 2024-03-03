@@ -6,6 +6,9 @@ package heap
 */
 import "C"
 import (
+	"errors"
+	"fmt"
+	"syscall"
 	"unsafe"
 )
 
@@ -32,12 +35,46 @@ func (h *Heap) Get(key string) string {
 	return C.GoString(cv)
 }
 
-func (h *Heap) Set(key, value string) {
+func (h *Heap) Set(key, value string) error {
 	ck := C.CString(key)
 	cv := C.CString(value)
+	defer C.free(unsafe.Pointer(ck))
+	defer C.free(unsafe.Pointer(cv))
 
-	C.heap_set(h.heap, ck, cv)
+	_, errno := C.heap_set(h.heap, ck, cv)
+	if err := goErr(errno); err != nil {
+		return err
+	}
 
-	C.free(unsafe.Pointer(ck))
-	C.free(unsafe.Pointer(cv))
+	return nil
+}
+
+func goErr(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	errno, ok := err.(syscall.Errno)
+	if !ok {
+		panic(fmt.Sprintf("goErr called with non-cgo err: %v", err))
+	}
+
+	if errno == 0 { // no error
+		return nil
+	}
+
+	if int(errno) >= len(errnos) {
+		return fmt.Errorf("unexpected errno: %d", errno)
+	}
+
+	if err := errnos[errno]; err != nil {
+		return err
+	}
+
+	// We expect the errnos array to be exhaustive.
+	return fmt.Errorf("unexpected errno: %d", errno)
+}
+
+var errnos = [...]error{
+	10: errors.New("zomdb: io error"),
 }

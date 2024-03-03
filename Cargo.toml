@@ -15,4 +15,5 @@ crate_type = ["cdylib"]
 cbindgen = "0.26.0"
 
 [dependencies]
+errno = "0.3.8"
 tempfile = "3.10.0"
