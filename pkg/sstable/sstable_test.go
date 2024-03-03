@@ -234,8 +234,6 @@ func TestParseEntries(t *testing.T) {
 			})
 		})
 	}
-
-	t.Fail()
 }
 
 func compareEntries(t *testing.T, expected, actual []entry) {
