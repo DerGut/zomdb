@@ -21,13 +21,13 @@ jobs:
       with:
         go-version: '1.22'
 
-    - name: Build
-      run: go build -v ./...
-
     - name: Build Rust (FFI bindings are required for tests)
       run: cargo build
       env:
         CARGO_TERM_COLOR: always
+
+    - name: Build
+      run: go build -v ./...
 
     - name: Test
       run: go test -v ./...
