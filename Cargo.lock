@@ -397,5 +397,6 @@ name = "zomdb"
 version = "0.1.0"
 dependencies = [
  "cbindgen",
+ "errno",
  "tempfile",
 ]
