@@ -1,3 +1,6 @@
-# Added by cargo
+# Test files
+/pkg/table/testdata/
+/pkg/sstable/testdata/
 
+# Cargo files
 /target
