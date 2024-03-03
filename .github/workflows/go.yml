@@ -24,5 +24,10 @@ jobs:
     - name: Build
       run: go build -v ./...
 
+    - name: Build Rust (FFI bindings are required for tests)
+      run: cargo build
+      env:
+        CARGO_TERM_COLOR: always
+
     - name: Test
       run: go test -v ./...
