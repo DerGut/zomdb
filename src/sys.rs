@@ -6,7 +6,14 @@ use std::{ffi, fs, mem::transmute};
 
 #[no_mangle]
 pub unsafe extern "C" fn create_heap(file_name_cstr: *const ffi::c_char) -> *mut Heap {
-    let file_name = from_cstr(file_name_cstr);
+    let file_name = match from_cstr(file_name_cstr) {
+        Ok(s) => s,
+        Err(e) => {
+            println!("zomdb: file_name: {:?}", e);
+            errno::set_errno(to_errno(e));
+            return std::ptr::null_mut();
+        }
+    };
 
     println!("zomdb: opening heap file: {}", file_name);
 
@@ -27,7 +34,15 @@ pub unsafe extern "C" fn heap_get(
     key_cstr: *const ffi::c_char,
 ) -> *const ffi::c_char {
     let heap = unsafe { &mut *ptr };
-    let key = from_cstr(key_cstr);
+
+    let key = match from_cstr(key_cstr) {
+        Ok(s) => s,
+        Err(e) => {
+            println!("zomdb: key: {:?}", e);
+            errno::set_errno(to_errno(e));
+            return std::ptr::null();
+        }
+    };
 
     match heap.get(&key) {
         Ok(Some(value)) => to_cstr(&value),
@@ -48,8 +63,24 @@ pub unsafe extern "C" fn heap_set(
     value_cstr: *const ffi::c_char,
 ) {
     let heap = unsafe { &mut *ptr };
-    let key = from_cstr(key_cstr);
-    let value = from_cstr(value_cstr);
+
+    let key = match from_cstr(key_cstr) {
+        Ok(s) => s,
+        Err(e) => {
+            println!("zomdb: key: {:?}", e);
+            errno::set_errno(to_errno(e));
+            return;
+        }
+    };
+
+    let value = match from_cstr(value_cstr) {
+        Ok(s) => s,
+        Err(e) => {
+            println!("zomdb: value: {:?}", e);
+            errno::set_errno(to_errno(e));
+            return;
+        }
+    };
 
     match heap.put(&key, &value) {
         Ok(_) => {}
@@ -66,13 +97,12 @@ pub unsafe extern "C" fn destroy_heap(ptr: *mut Heap) {
     drop(heap);
 }
 
-unsafe fn from_cstr(s: *const ffi::c_char) -> String {
+unsafe fn from_cstr(s: *const ffi::c_char) -> Result<String, Error> {
     let cstr = unsafe { ffi::CStr::from_ptr(s) };
-    cstr.to_str()
-        // The crate is built to be used with Go, which should guarantee
-        // strings to be utf8 encoded.
-        .expect("value is not utf8")
-        .to_owned()
+    match cstr.to_str() {
+        Ok(s) => Ok(s.to_owned()),
+        Err(e) => Err(Error::UTF8Error(e)),
+    }
 }
 
 unsafe fn to_cstr(s: &str) -> *const ffi::c_char {
@@ -81,10 +111,12 @@ unsafe fn to_cstr(s: &str) -> *const ffi::c_char {
 }
 
 pub const ERR_IO: i32 = 10;
+pub const ERR_UTF8: i32 = 30;
 
 fn to_errno(e: crate::Error) -> errno::Errno {
     let no = match e {
         Error::IOError(_) => ERR_IO,
+        Error::UTF8Error(_) => ERR_UTF8,
     };
 
     errno::Errno(no)
