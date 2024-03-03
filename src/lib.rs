@@ -80,11 +80,13 @@ type HeapTuple = (String, String);
 impl Index for Heap {
     fn put(&mut self, key: &str, value: &str) -> Result<(), Error> {
         let bytes = Self::serialize(key, value);
-        self.file.write_all(bytes.as_slice())
+        self.file
+            .write_all(bytes.as_slice())
+            .map_err(Error::IOError)
     }
 
     fn get(&mut self, key: &str) -> Result<Option<String>, Error> {
-        self.file.rewind()?;
+        self.file.rewind().map_err(Error::IOError)?;
         let reader = io::BufReader::new(&self.file);
 
         // TODO: Read the file in reverse line by line instead of reading
