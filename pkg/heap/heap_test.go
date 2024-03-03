@@ -1,13 +1,16 @@
 package heap_test
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/DerGut/zomdb/pkg/heap"
 )
 
 func TestHeap(t *testing.T) {
-	h := heap.New("test")
+	name := filepath.Join(t.TempDir(), "test.zomdb")
+
+	h := heap.New(name)
 	defer h.Close()
 
 	h.Set("key", "value")
