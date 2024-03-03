@@ -1,6 +1,6 @@
 use std::{
-    fs,
-    io::{self, BufRead, Error, Seek, Write},
+    error, fmt, fs,
+    io::{self, BufRead, Seek, Write},
 };
 
 mod sys;
@@ -11,6 +11,21 @@ const MAX_VALUE_SIZE: usize = 1024;
 trait Index {
     fn put(&mut self, key: &str, value: &str) -> Result<(), Error>;
     fn get(&mut self, key: &str) -> Result<Option<String>, Error>;
+}
+
+#[derive(Debug)]
+enum Error {
+    IOError(io::Error),
+}
+
+impl error::Error for Error {}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::IOError(e) => write!(f, "IO error: {}", e),
+        }
+    }
 }
 
 pub struct Heap {
