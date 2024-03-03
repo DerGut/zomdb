@@ -10,7 +10,10 @@ import (
 func TestHeap(t *testing.T) {
 	name := filepath.Join(t.TempDir(), "test.zomdb")
 
-	h := heap.New(name)
+	h, err := heap.New(name)
+	if err != nil {
+		t.Fatalf("new: expected no error, got %v", err)
+	}
 	defer h.Close()
 
 	if err := h.Set("key", "value"); err != nil {
@@ -30,7 +33,10 @@ func TestHeap(t *testing.T) {
 func FuzzHeapSet(f *testing.F) {
 	name := filepath.Join(f.TempDir(), "test.zomdb")
 
-	h := heap.New(name)
+	h, err := heap.New(name)
+	if err != nil {
+		f.Fatalf("new: expected no error, got %v", err)
+	}
 	defer h.Close()
 
 	f.Add("key", "value")
