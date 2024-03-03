@@ -82,4 +82,5 @@ func goErr(err error) error {
 
 var errnos = [...]error{
 	10: errors.New("zomdb: io error"),
+	30: errors.New("zomdb: not utf8-encoded"),
 }

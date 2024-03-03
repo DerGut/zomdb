@@ -1,6 +1,7 @@
 use std::{
     error, fmt, fs,
     io::{self, BufRead, Seek, Write},
+    str,
 };
 
 mod sys;
@@ -16,6 +17,7 @@ trait Index {
 #[derive(Debug)]
 enum Error {
     IOError(io::Error),
+    UTF8Error(str::Utf8Error),
 }
 
 impl error::Error for Error {}
@@ -24,6 +26,7 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Error::IOError(e) => write!(f, "IO error: {}", e),
+            Error::UTF8Error(e) => write!(f, "UTF-8 error: {}", e),
         }
     }
 }
