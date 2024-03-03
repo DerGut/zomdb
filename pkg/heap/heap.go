@@ -16,12 +16,16 @@ type Heap struct {
 	heap *C.struct_Heap
 }
 
-func New(fileName string) *Heap {
+func New(fileName string) (*Heap, error) {
 	cs := C.CString(fileName)
-	heap := C.create_heap(cs)
-	C.free(unsafe.Pointer(cs))
+	defer C.free(unsafe.Pointer(cs))
 
-	return &Heap{heap: heap}
+	heap, errno := C.create_heap(cs)
+	if err := goErr(errno); err != nil {
+		return nil, err
+	}
+
+	return &Heap{heap: heap}, nil
 }
 
 func (h *Heap) Close() {
