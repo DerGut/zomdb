@@ -29,10 +29,15 @@ pub unsafe extern "C" fn heap_get(
     let heap = unsafe { &mut *ptr };
     let key = from_cstr(key_cstr);
 
-    let value = heap.get(&key).unwrap();
-    match value {
-        Some(value) => to_cstr(&value),
-        None => std::ptr::null(),
+    match heap.get(&key) {
+        Ok(Some(value)) => to_cstr(&value),
+        // TODO: Do we want to set errno here?
+        Ok(None) => std::ptr::null(),
+        Err(e) => {
+            println!("zomdb: heap.get: {:?}", e);
+            errno::set_errno(to_errno(e));
+            std::ptr::null()
+        }
     }
 }
 

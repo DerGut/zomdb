@@ -28,11 +28,16 @@ func (h *Heap) Close() {
 	C.destroy_heap(h.heap)
 }
 
-func (h *Heap) Get(key string) string {
+func (h *Heap) Get(key string) (string, error) {
 	ck := C.CString(key)
-	cv := C.heap_get(h.heap, ck)
-	C.free(unsafe.Pointer(ck))
-	return C.GoString(cv)
+	defer C.free(unsafe.Pointer(ck))
+
+	cv, errno := C.heap_get(h.heap, ck)
+	if err := goErr(errno); err != nil {
+		return "", err
+	}
+
+	return C.GoString(cv), nil
 }
 
 func (h *Heap) Set(key, value string) error {
