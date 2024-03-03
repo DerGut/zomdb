@@ -26,3 +26,17 @@ func TestHeap(t *testing.T) {
 		t.Errorf("expected value to be \"value\", got %q", value)
 	}
 }
+
+func FuzzHeapSet(f *testing.F) {
+	name := filepath.Join(f.TempDir(), "test.zomdb")
+
+	h := heap.New(name)
+	defer h.Close()
+
+	f.Add("key", "value")
+	f.Fuzz(func(t *testing.T, a string, b string) {
+		if err := h.Set(a, b); err != nil {
+			return
+		}
+	})
+}
