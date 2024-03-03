@@ -2,23 +2,37 @@ package zomdb
 
 import (
 	"context"
-	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+
+	"github.com/DerGut/zomdb/pkg/heap"
 )
 
-type DB struct{}
+type DB struct {
+	heap *heap.Heap
+}
 
 func New() (*DB, error) {
-	return &DB{}, nil
+	name := filepath.Join(os.TempDir(), "heap.zomdb")
+
+	h, err := heap.New(name)
+	if err != nil {
+		return nil, fmt.Errorf("creating heap: %w", err)
+	}
+
+	return &DB{heap: h}, nil
 }
 
 func (d *DB) Close() error {
-	return errors.New("not implemented")
+	d.heap.Close()
+	return nil
 }
 
-func (d *DB) Get(context.Context, string) (string, error) {
-	return "", errors.New("not implemented")
+func (d *DB) Get(_ context.Context, key string) (string, error) {
+	return d.heap.Get(key)
 }
 
-func (d *DB) Set(context.Context, string, string) error {
-	return errors.New("not implemented")
+func (d *DB) Set(_ context.Context, key string, value string) error {
+	return d.heap.Set(key, value)
 }
