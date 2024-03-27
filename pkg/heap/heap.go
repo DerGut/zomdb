@@ -2,6 +2,8 @@ package heap
 
 /*
 #cgo darwin,arm64 LDFLAGS: -L${SRCDIR}/../../lib -lzomdb_darwin_arm64
+#cgo linux,arm64 LDFLAGS: -L${SRCDIR}/../../lib -lzomdb_linux_arm64
+#cgo linux,amd64 LDFLAGS: -L${SRCDIR}/../../lib -lzomdb_linux_amd64
 #cgo CFLAGS: -I${SRCDIR}/../../include
 #include "zomdb.h"
 */
