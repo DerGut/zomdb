@@ -6,7 +6,10 @@ use std::{
 
 mod sys;
 
+/// The maximum byte size of keys.
 const MAX_KEY_SIZE: usize = 256;
+
+/// The maximum byte size of values.
 const MAX_VALUE_SIZE: usize = 1024;
 
 trait Index {
@@ -16,8 +19,8 @@ trait Index {
 
 #[derive(Debug)]
 enum Error {
+    InputError(InputError),
     IOError(io::Error),
-    UTF8Error(str::Utf8Error),
 }
 
 impl error::Error for Error {}
@@ -25,8 +28,31 @@ impl error::Error for Error {}
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Error::InputError(e) => write!(f, "Input error: {}", e),
             Error::IOError(e) => write!(f, "IO error: {}", e),
-            Error::UTF8Error(e) => write!(f, "UTF-8 error: {}", e),
+        }
+    }
+}
+
+#[derive(Debug)]
+enum InputError {
+    Utf8Error(str::Utf8Error),
+    KeySizeError(usize),
+    ValueSizeError(usize),
+}
+
+impl error::Error for InputError {}
+
+impl fmt::Display for InputError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InputError::Utf8Error(e) => write!(f, "UTF-8 error: {}", e),
+            InputError::KeySizeError(size) => {
+                write!(f, "Key size not in [1,{}]: {}", MAX_KEY_SIZE, size)
+            }
+            InputError::ValueSizeError(size) => {
+                write!(f, "Value size not in [1,{}]: {}", MAX_VALUE_SIZE, size)
+            }
         }
     }
 }
@@ -82,6 +108,13 @@ type HeapTuple = (String, String);
 
 impl Index for Heap {
     fn put(&mut self, key: &str, value: &str) -> Result<(), Error> {
+        if key.len() > MAX_KEY_SIZE || key.len() == 0 {
+            return Err(Error::InputError(InputError::KeySizeError(key.len())));
+        }
+        if value.len() > MAX_VALUE_SIZE {
+            return Err(Error::InputError(InputError::ValueSizeError(value.len())));
+        }
+
         let bytes = Self::serialize(key, value);
         self.file
             .write_all(bytes.as_slice())
@@ -97,7 +130,15 @@ impl Index for Heap {
         let lines: Vec<_> = reader.lines().map_while(|l| l.ok()).collect();
 
         for line in lines.iter().rev() {
-            let heap_tuple = Self::deserialize(line.as_bytes()).unwrap();
+            let heap_tuple = match Self::deserialize(line.as_bytes()) {
+                Ok(heap_tuple) => heap_tuple,
+                Err(_) => {
+                    // This means that the line is not a valid heap tuple and
+                    // our file is corrupted. We skip this line for now but
+                    // should at least log this.
+                    continue;
+                }
+            };
             if heap_tuple.0 == key {
                 return Ok(Some(heap_tuple.1));
             }
