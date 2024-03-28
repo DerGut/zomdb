@@ -3,6 +3,9 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+/**
+ * Error code for I/O errors.
+ */
 #define ERR_IO 10
 
 #define ERR_UTF8 30
