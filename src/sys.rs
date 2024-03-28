@@ -1,7 +1,7 @@
 //! FFI wrapper for functions exposed from zomdb.
 //!
 //! This module will eventually move to its own zomdb-sys crate.
-use crate::{Error, Heap, Index};
+use crate::{Error, Heap, Index, InputError};
 use std::{ffi, fs, mem::transmute};
 
 #[no_mangle]
@@ -101,7 +101,7 @@ unsafe fn from_cstr(s: *const ffi::c_char) -> Result<String, Error> {
     let cstr = unsafe { ffi::CStr::from_ptr(s) };
     match cstr.to_str() {
         Ok(s) => Ok(s.to_owned()),
-        Err(e) => Err(Error::UTF8Error(e)),
+        Err(e) => Err(Error::InputError(InputError::Utf8Error(e))),
     }
 }
 
@@ -110,13 +110,27 @@ unsafe fn to_cstr(s: &str) -> *const ffi::c_char {
     cstr.into_raw()
 }
 
+/// Error code for I/O errors.
 pub const ERR_IO: i32 = 10;
+
+/// Error code for invalid UTF-8.
+/// Type of an input error.
 pub const ERR_UTF8: i32 = 30;
+
+/// Error code for invalid key size.
+/// Type of an input error.
+pub const ERR_KEY_SIZE: i32 = 31;
+
+/// Error code for invalid value size.
+/// Type of an input error.
+pub const ERR_VALUE_SIZE: i32 = 32;
 
 fn to_errno(e: crate::Error) -> errno::Errno {
     let no = match e {
         Error::IOError(_) => ERR_IO,
-        Error::UTF8Error(_) => ERR_UTF8,
+        Error::InputError(InputError::Utf8Error(_)) => ERR_UTF8,
+        Error::InputError(InputError::KeySizeError(_)) => ERR_KEY_SIZE,
+        Error::InputError(InputError::ValueSizeError(_)) => ERR_VALUE_SIZE,
     };
 
     errno::Errno(no)
