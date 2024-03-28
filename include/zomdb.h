@@ -4,11 +4,32 @@
 #include <stdlib.h>
 
 /**
+ * Error code for keys that could not be found.
+ */
+#define ERR_NOT_FOUND 1
+
+/**
  * Error code for I/O errors.
  */
 #define ERR_IO 10
 
+/**
+ * Error code for invalid UTF-8.
+ * Type of an input error.
+ */
 #define ERR_UTF8 30
+
+/**
+ * Error code for invalid key size.
+ * Type of an input error.
+ */
+#define ERR_KEY_SIZE 31
+
+/**
+ * Error code for invalid value size.
+ * Type of an input error.
+ */
+#define ERR_VALUE_SIZE 32
 
 typedef struct Heap Heap;
 

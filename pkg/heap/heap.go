@@ -88,6 +88,9 @@ func goErr(err error) error {
 }
 
 var errnos = [...]error{
+	1:  errors.New("zomdb: not found"),
 	10: errors.New("zomdb: io error"),
 	30: errors.New("zomdb: not utf8-encoded"),
+	31: errors.New("zomdb: invalid key size"),
+	32: errors.New("zomdb: invalid value size"),
 }

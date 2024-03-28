@@ -46,8 +46,10 @@ pub unsafe extern "C" fn heap_get(
 
     match heap.get(&key) {
         Ok(Some(value)) => to_cstr(&value),
-        // TODO: Do we want to set errno here?
-        Ok(None) => std::ptr::null(),
+        Ok(None) => {
+            errno::set_errno(errno::Errno(ERR_NOT_FOUND));
+            std::ptr::null()
+        }
         Err(e) => {
             println!("zomdb: heap.get: {:?}", e);
             errno::set_errno(to_errno(e));
@@ -109,6 +111,9 @@ unsafe fn to_cstr(s: &str) -> *const ffi::c_char {
     let cstr = ffi::CString::new(s).unwrap();
     cstr.into_raw()
 }
+
+/// Error code for keys that could not be found.
+pub const ERR_NOT_FOUND: i32 = 1;
 
 /// Error code for I/O errors.
 pub const ERR_IO: i32 = 10;
