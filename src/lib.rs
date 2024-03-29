@@ -1,7 +1,7 @@
 use std::{
     error, fmt, fs,
     io::{self, BufRead, Seek, Write},
-    str,
+    path, str,
 };
 
 mod sys;
@@ -64,6 +64,16 @@ pub struct Heap {
 impl Heap {
     fn new(file: fs::File) -> Self {
         Self { file }
+    }
+
+    fn from(path: path::PathBuf) -> Result<Self, Error> {
+        let file = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(path)
+            .map_err(Error::IOError)?;
+        Ok(Self::new(file))
     }
 
     fn serialize(key: &str, value: &str) -> Vec<u8> {
