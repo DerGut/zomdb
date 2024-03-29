@@ -2,7 +2,7 @@
 //!
 //! This module will eventually move to its own zomdb-sys crate.
 use crate::{Error, Heap, Index, InputError};
-use std::{ffi, fs, mem::transmute};
+use std::{ffi, mem::transmute};
 
 #[no_mangle]
 pub unsafe extern "C" fn create_heap(file_name_cstr: *const ffi::c_char) -> *mut Heap {
@@ -17,15 +17,16 @@ pub unsafe extern "C" fn create_heap(file_name_cstr: *const ffi::c_char) -> *mut
 
     println!("zomdb: opening heap file: {}", file_name);
 
-    let file = fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .open(file_name)
-        .unwrap();
-    let heap = Box::new(Heap::new(file));
+    let heap = match Heap::from(file_name.into()) {
+        Ok(heap) => heap,
+        Err(e) => {
+            println!("zomdb: Heap::from: {:?}", e);
+            errno::set_errno(to_errno(e));
+            return std::ptr::null_mut();
+        }
+    };
 
-    unsafe { transmute(heap) }
+    unsafe { transmute(Box::new(heap)) }
 }
 
 #[no_mangle]
