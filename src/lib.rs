@@ -70,6 +70,7 @@ impl Heap {
         let file = fs::OpenOptions::new()
             .read(true)
             .write(true)
+            .append(true)
             .create(true)
             .open(path)
             .map_err(Error::IOError)?;
