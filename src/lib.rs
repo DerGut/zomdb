@@ -1,6 +1,6 @@
 use std::{
-    error, fmt, fs,
-    io::{self, BufRead, Seek, Write},
+    cmp, error, fmt, fs,
+    io::{self, Read, Seek, Write},
     path, str,
 };
 
@@ -21,6 +21,9 @@ trait Index {
 enum Error {
     InputError(InputError),
     IOError(io::Error),
+
+    /// Indicates that the data on disk was corrupted.
+    DataError(DeserializationError),
 }
 
 impl error::Error for Error {}
@@ -30,6 +33,7 @@ impl fmt::Display for Error {
         match self {
             Error::InputError(e) => write!(f, "Input error: {}", e),
             Error::IOError(e) => write!(f, "IO error: {}", e),
+            Error::DataError(e) => write!(f, "Data error: {}", e),
         }
     }
 }
@@ -92,7 +96,7 @@ impl Heap {
     }
 
     fn deserialize(data: &[u8]) -> Result<HeapTuple, DeserializationError> {
-        assert!(data.len() >= 3);
+        assert!(data.len() > 3);
 
         let key_size = data[data.len() - 1] as usize;
         if key_size > MAX_KEY_SIZE {
@@ -114,11 +118,28 @@ impl Heap {
         )
         .unwrap();
 
-        Ok((key.to_string(), value.to_string()))
+        Ok(HeapTuple::from(key, value))
     }
 }
 
-type HeapTuple = (String, String);
+#[derive(Debug, PartialEq)]
+struct HeapTuple {
+    key: String,
+    value: String,
+}
+
+impl HeapTuple {
+    fn from(key: &str, value: &str) -> Self {
+        return HeapTuple {
+            key: key.to_string(),
+            value: value.to_string(),
+        };
+    }
+
+    fn disk_len(&self) -> usize {
+        return self.key.len() + self.value.len() + 3;
+    }
+}
 
 impl Index for Heap {
     fn put(&mut self, key: &str, value: &str) -> Result<(), Error> {
@@ -130,35 +151,38 @@ impl Index for Heap {
         }
 
         let bytes = Self::serialize(key, value);
+
         self.file
             .write_all(bytes.as_slice())
             .map_err(Error::IOError)
     }
 
     fn get(&mut self, key: &str) -> Result<Option<String>, Error> {
-        self.file.rewind().map_err(Error::IOError)?;
-        let reader = io::BufReader::new(&self.file);
+        search_key_reverse(key, &self.file)
+        // self.file.rewind().map_err(Error::IOError)?;
+        // let reader = io::BufReader::new(&self.file);
 
-        // TODO: Read the file in reverse line by line instead of reading
-        // everything into memory first.
-        let lines: Vec<_> = reader.lines().map_while(|l| l.ok()).collect();
+        // // TODO: Read the file in reverse line by line instead of reading
+        // // everything into memory first.
+        // let lines: Vec<_> = reader.lines().map_while(|l| l.ok()).collect();
 
-        for line in lines.iter().rev() {
-            let heap_tuple = match Self::deserialize(line.as_bytes()) {
-                Ok(heap_tuple) => heap_tuple,
-                Err(_) => {
-                    // This means that the line is not a valid heap tuple and
-                    // our file is corrupted. We skip this line for now but
-                    // should at least log this.
-                    continue;
-                }
-            };
-            if heap_tuple.0 == key {
-                return Ok(Some(heap_tuple.1));
-            }
-        }
+        // for line in lines.iter().rev() {
+        //     let heap_tuple = match Self::deserialize(line.as_bytes()) {
+        //         Ok(heap_tuple) => heap_tuple,
+        //         Err(e) => {
+        //             print!("Skipping line: {}", e);
+        //             // This means that the line is not a valid heap tuple and
+        //             // our file is corrupted. We skip this line for now but
+        //             // should at least log this.
+        //             continue;
+        //         }
+        //     };
+        //     if heap_tuple.0 == key {
+        //         return Ok(Some(heap_tuple.1));
+        //     }
+        // }
 
-        Ok(None)
+        // Ok(None)
     }
 }
 
@@ -239,3 +263,21 @@ mod test {
         assert_eq!(value, Some("value".to_string()));
     }
 }
+
+    #[test]
+    fn test_heap_put_get_multiple() {
+        let heap_file = tempfile().unwrap();
+        let mut heap = Heap::new(heap_file);
+
+        heap.put("key1", "value1").unwrap();
+        heap.put("key2", "value2").unwrap();
+        heap.put("key3", "value3").unwrap();
+
+        let value1 = heap.get("key1").unwrap();
+        let value2 = heap.get("key2").unwrap();
+        let value3 = heap.get("key3").unwrap();
+
+        assert_eq!(value1, Some("value1".to_string()));
+        assert_eq!(value2, Some("value2".to_string()));
+        assert_eq!(value3, Some("value3".to_string()));
+    }
