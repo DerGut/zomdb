@@ -214,9 +214,20 @@ mod test {
 
     #[test]
     fn test_heap_deserialize() {
-        let serialized = vec![3, 0, 5, b'k', b'e', b'y', b'v', b'a', b'l', b'u', b'e'];
+        let serialized = vec![b'v', b'a', b'l', b'u', b'e', b'k', b'e', b'y', 0, 5, 3];
         let deserialized = Heap::deserialize(&serialized).unwrap();
-        assert_eq!(deserialized, ("key".to_string(), "value".to_string()));
+        assert_eq!(deserialized, HeapTuple::from("key", "value"),);
+    }
+
+    #[test]
+    fn test_heap_serde() {
+        let key = "key";
+        let value = "value";
+
+        let serialized = Heap::serialize(&key, &value);
+        let deserialized = Heap::deserialize(&serialized).unwrap();
+
+        assert_eq!(deserialized, HeapTuple::from(key, value),);
     }
 
     #[test]
