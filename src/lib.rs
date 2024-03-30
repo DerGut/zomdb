@@ -231,6 +231,73 @@ mod test {
     }
 
     #[test]
+impl error::Error for DeserializationError {}
+
+impl fmt::Display for DeserializationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DeserializationError::KeySizeTooBig => write!(f, "Key size too big"),
+            DeserializationError::ValueSizeTooBig => write!(f, "Value size too big"),
+            DeserializationError::DataTooShort => write!(f, "Data too short"),
+        }
+    }
+}
+
+fn search_key_reverse(key: &str, file: &fs::File) -> Result<Option<String>, Error> {
+    return search_reverse_chunked(key, file);
+}
+
+fn search_reverse_chunked(key: &str, mut file: &fs::File) -> Result<Option<String>, Error> {
+    const MAX_TUPLE_SIZE: usize = MAX_KEY_SIZE + MAX_VALUE_SIZE + 3;
+
+    file.seek(io::SeekFrom::End(0)).map_err(Error::IOError)?;
+
+    let file_size = file.metadata().map_err(Error::IOError)?.len() as usize;
+
+    let mut bytes_remaining = file_size;
+    while bytes_remaining > 0 {
+        let current_chunk_size = cmp::min(MAX_TUPLE_SIZE, bytes_remaining);
+
+        // TODO: We don't seek to the beginning of the tuple, but to the
+        // beginning of the max tuple size. This means, that the next seek
+        // will seek relative from the beginning of the buffer, not relative
+        // from where the tuple ends.
+        // TODO: Either consuming the remaining buffer until we get
+        // DataTooShort, or reread some data into a new buffer.
+        // Seek to beginning of buffer read
+        file.seek(io::SeekFrom::Current(-(current_chunk_size as i64)))
+            .map_err(Error::IOError)?;
+
+        let mut chunk_buffer = vec![0u8; current_chunk_size];
+        file.read_exact(&mut chunk_buffer).map_err(Error::IOError)?;
+
+        const MIN_TUPLE_SIZE: usize = 4;
+        let mut unread_chunk_bytes = current_chunk_size;
+        while unread_chunk_bytes > MIN_TUPLE_SIZE {
+            // Check, whether we already read more tuples into the current buffer.
+            let tuple = match Heap::deserialize(&chunk_buffer[..unread_chunk_bytes]) {
+                Ok(tuple) => tuple,
+                Err(DeserializationError::DataTooShort) => {
+                    // We've exhausted the buffer and need to read a new chunk.
+                    // TODO: move these bytes into an overflow buffer and
+                    // re-enter the main chunk read loop.
+                    panic!("TODO");
+                }
+                Err(e) => return Err(Error::DataError(e)),
+            };
+
+            if tuple.key == key {
+                return Ok(Some(tuple.value));
+            }
+
+            unread_chunk_bytes -= tuple.disk_len();
+            bytes_remaining -= tuple.disk_len();
+        }
+    }
+
+    Ok(None)
+}
+
     fn test_heap_get() {
         let mut heap_file = tempfile().unwrap();
 
