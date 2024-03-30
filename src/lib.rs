@@ -83,33 +83,36 @@ impl Heap {
         // 8bit for key size
         // 16bit for value size
         let mut data = Vec::with_capacity(key.len() + value.len() + 1 + 2);
-        data.push(key.len() as u8);
+        data.extend_from_slice(value.as_bytes());
+        data.extend_from_slice(key.as_bytes());
         data.push((value.len() >> 8) as u8);
         data.push(value.len() as u8);
-        data.extend_from_slice(key.as_bytes());
-        data.extend_from_slice(value.as_bytes());
+        data.push(key.len() as u8);
         data
     }
 
     fn deserialize(data: &[u8]) -> Result<HeapTuple, DeserializationError> {
         assert!(data.len() >= 3);
 
-        let key_size = data[0] as usize;
+        let key_size = data[data.len() - 1] as usize;
         if key_size > MAX_KEY_SIZE {
             return Err(DeserializationError::KeySizeTooBig);
         }
 
-        let value_size = ((data[1] as usize) << 8) | data[2] as usize;
+        let value_size = ((data[data.len() - 3] as usize) << 8) | data[data.len() - 2] as usize;
         if value_size > MAX_VALUE_SIZE {
             return Err(DeserializationError::ValueSizeTooBig);
         }
 
-        if key_size + value_size + 3 < data.len() {
+        if data.len() < key_size + value_size + 3 {
             return Err(DeserializationError::DataTooShort);
         }
 
-        let key = std::str::from_utf8(&data[3..3 + key_size]).unwrap();
-        let value = std::str::from_utf8(&data[3 + key_size..3 + key_size + value_size]).unwrap();
+        let key = std::str::from_utf8(&data[data.len() - 3 - key_size..data.len() - 3]).unwrap();
+        let value = std::str::from_utf8(
+            &data[data.len() - 3 - key_size - value_size..data.len() - 3 - key_size],
+        )
+        .unwrap();
 
         Ok((key.to_string(), value.to_string()))
     }
@@ -221,7 +224,7 @@ mod test {
 
         assert_eq!(
             buf,
-            vec![3, 0, 5, b'k', b'e', b'y', b'v', b'a', b'l', b'u', b'e']
+            vec![b'v', b'a', b'l', b'u', b'e', b'k', b'e', b'y', 0, 5, 3]
         );
     }
 
