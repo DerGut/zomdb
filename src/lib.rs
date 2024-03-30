@@ -130,20 +130,20 @@ struct HeapTuple {
 
 impl HeapTuple {
     fn from(key: &str, value: &str) -> Self {
-        return HeapTuple {
+        HeapTuple {
             key: key.to_string(),
             value: value.to_string(),
-        };
+        }
     }
 
     fn disk_len(&self) -> usize {
-        return self.key.len() + self.value.len() + 3;
+        self.key.len() + self.value.len() + 3
     }
 }
 
 impl Index for Heap {
     fn put(&mut self, key: &str, value: &str) -> Result<(), Error> {
-        if key.len() > MAX_KEY_SIZE || key.len() == 0 {
+        if key.len() > MAX_KEY_SIZE || key.is_empty() {
             return Err(Error::InputError(InputError::KeySizeError(key.len())));
         }
         if value.len() > MAX_VALUE_SIZE {
