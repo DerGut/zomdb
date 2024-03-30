@@ -31,6 +31,12 @@
  */
 #define ERR_VALUE_SIZE 32
 
+/**
+ * Error code for data errors.
+ * Indicates that data on disk is corrupted.
+ */
+#define ERR_DATA 50
+
 typedef struct Heap Heap;
 
 struct Heap *create_heap(const char *file_name_cstr);

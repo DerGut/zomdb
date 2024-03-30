@@ -131,12 +131,17 @@ pub const ERR_KEY_SIZE: i32 = 31;
 /// Type of an input error.
 pub const ERR_VALUE_SIZE: i32 = 32;
 
+/// Error code for data errors.
+/// Indicates that data on disk is corrupted.
+pub const ERR_DATA: i32 = 50;
+
 fn to_errno(e: crate::Error) -> errno::Errno {
     let no = match e {
         Error::IOError(_) => ERR_IO,
         Error::InputError(InputError::Utf8Error(_)) => ERR_UTF8,
         Error::InputError(InputError::KeySizeError(_)) => ERR_KEY_SIZE,
         Error::InputError(InputError::ValueSizeError(_)) => ERR_VALUE_SIZE,
+        Error::DataError(_) => ERR_DATA,
     };
 
     errno::Errno(no)

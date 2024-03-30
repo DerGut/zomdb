@@ -1,6 +1,7 @@
 package heap_test
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -28,6 +29,39 @@ func TestHeap(t *testing.T) {
 	if value != "value" {
 		t.Errorf("expected value to be \"value\", got %q", value)
 	}
+}
+
+func TestHeapSetAndGetMultiple(t *testing.T) {
+	name := filepath.Join(t.TempDir(), "test.zomdb")
+
+	h, err := heap.New(name)
+	if err != nil {
+		t.Fatalf("new: expected no error, got: %v", err)
+	}
+	defer h.Close()
+
+	for i := 0; i < 3; i++ {
+		key := fmt.Sprintf("key_%d", i+1)
+		value := fmt.Sprintf("value_%d", i+1)
+		if err := h.Set(key, value); err != nil {
+			t.Fatalf("set %d: expected no error, got %v", i+1, err)
+		}
+	}
+
+	for i := 0; i < 3; i++ {
+		key := fmt.Sprintf("key_%d", i+1)
+		value := fmt.Sprintf("value_%d", i+1)
+
+		got, err := h.Get(key)
+		if err != nil {
+			t.Fatalf("get %d: expected no error, got %v", i+1, err)
+		}
+
+		if got != value {
+			t.Errorf("expected value to be %q, got %q", value, got)
+		}
+	}
+
 }
 
 func FuzzHeapSet(f *testing.F) {

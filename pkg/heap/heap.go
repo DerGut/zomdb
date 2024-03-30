@@ -93,4 +93,5 @@ var errnos = [...]error{
 	30: errors.New("zomdb: not utf8-encoded"),
 	31: errors.New("zomdb: invalid key size"),
 	32: errors.New("zomdb: invalid value size"),
+	50: errors.New("zomdb: corrupt data"),
 }
