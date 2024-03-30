@@ -158,96 +158,11 @@ impl Index for Heap {
     }
 
     fn get(&mut self, key: &str) -> Result<Option<String>, Error> {
-        search_key_reverse(key, &self.file)
-        // self.file.rewind().map_err(Error::IOError)?;
-        // let reader = io::BufReader::new(&self.file);
-
-        // // TODO: Read the file in reverse line by line instead of reading
-        // // everything into memory first.
-        // let lines: Vec<_> = reader.lines().map_while(|l| l.ok()).collect();
-
-        // for line in lines.iter().rev() {
-        //     let heap_tuple = match Self::deserialize(line.as_bytes()) {
-        //         Ok(heap_tuple) => heap_tuple,
-        //         Err(e) => {
-        //             print!("Skipping line: {}", e);
-        //             // This means that the line is not a valid heap tuple and
-        //             // our file is corrupted. We skip this line for now but
-        //             // should at least log this.
-        //             continue;
-        //         }
-        //     };
-        //     if heap_tuple.0 == key {
-        //         return Ok(Some(heap_tuple.1));
-        //     }
-        // }
-
-        // Ok(None)
+        search_reverse(key, &self.file)
     }
 }
 
-#[derive(Debug)]
-enum DeserializationError {
-    KeySizeTooBig,
-    ValueSizeTooBig,
-    DataTooShort,
-}
-
-#[cfg(test)]
-mod test {
-    use std::{
-        io::{Read, Seek},
-        vec,
-    };
-    use tempfile::tempfile;
-
-    use super::*;
-
-    #[test]
-    fn test_heap_serialize() {
-        let serialized = Heap::serialize("key", "value");
-        assert_eq!(
-            serialized,
-            vec![3, 0, 5, b'k', b'e', b'y', b'v', b'a', b'l', b'u', b'e']
-        );
-    }
-
-    #[test]
-    fn test_heap_deserialize() {
-        let serialized = vec![b'v', b'a', b'l', b'u', b'e', b'k', b'e', b'y', 0, 5, 3];
-        let deserialized = Heap::deserialize(&serialized).unwrap();
-        assert_eq!(deserialized, HeapTuple::from("key", "value"),);
-    }
-
-    #[test]
-    fn test_heap_serde() {
-        let key = "key";
-        let value = "value";
-
-        let serialized = Heap::serialize(&key, &value);
-        let deserialized = Heap::deserialize(&serialized).unwrap();
-
-        assert_eq!(deserialized, HeapTuple::from(key, value),);
-    }
-
-    #[test]
-impl error::Error for DeserializationError {}
-
-impl fmt::Display for DeserializationError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            DeserializationError::KeySizeTooBig => write!(f, "Key size too big"),
-            DeserializationError::ValueSizeTooBig => write!(f, "Value size too big"),
-            DeserializationError::DataTooShort => write!(f, "Data too short"),
-        }
-    }
-}
-
-fn search_key_reverse(key: &str, file: &fs::File) -> Result<Option<String>, Error> {
-    return search_reverse_chunked(key, file);
-}
-
-fn search_reverse_chunked(key: &str, mut file: &fs::File) -> Result<Option<String>, Error> {
+fn search_reverse(key: &str, mut file: &fs::File) -> Result<Option<String>, Error> {
     const MAX_TUPLE_SIZE: usize = MAX_KEY_SIZE + MAX_VALUE_SIZE + 3;
 
     file.seek(io::SeekFrom::End(0)).map_err(Error::IOError)?;
@@ -258,13 +173,6 @@ fn search_reverse_chunked(key: &str, mut file: &fs::File) -> Result<Option<Strin
     while bytes_remaining > 0 {
         let current_chunk_size = cmp::min(MAX_TUPLE_SIZE, bytes_remaining);
 
-        // TODO: We don't seek to the beginning of the tuple, but to the
-        // beginning of the max tuple size. This means, that the next seek
-        // will seek relative from the beginning of the buffer, not relative
-        // from where the tuple ends.
-        // TODO: Either consuming the remaining buffer until we get
-        // DataTooShort, or reread some data into a new buffer.
-        // Seek to beginning of buffer read
         file.seek(io::SeekFrom::Current(-(current_chunk_size as i64)))
             .map_err(Error::IOError)?;
 
@@ -298,6 +206,67 @@ fn search_reverse_chunked(key: &str, mut file: &fs::File) -> Result<Option<Strin
     Ok(None)
 }
 
+#[derive(Debug)]
+enum DeserializationError {
+    KeySizeTooBig,
+    ValueSizeTooBig,
+    DataTooShort,
+}
+
+impl error::Error for DeserializationError {}
+
+impl fmt::Display for DeserializationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DeserializationError::KeySizeTooBig => write!(f, "Key size too big"),
+            DeserializationError::ValueSizeTooBig => {
+                write!(f, "Value size too big")
+            }
+            DeserializationError::DataTooShort => {
+                write!(f, "data buffer too short")
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::{
+        io::{Read, Seek},
+        vec,
+    };
+    use tempfile::tempfile;
+
+    use super::*;
+
+    #[test]
+    fn test_heap_serialize() {
+        let serialized = Heap::serialize("key", "value");
+        assert_eq!(
+            serialized,
+            vec![b'v', b'a', b'l', b'u', b'e', b'k', b'e', b'y', 0, 5, 3]
+        );
+    }
+
+    #[test]
+    fn test_heap_deserialize() {
+        let serialized = vec![b'v', b'a', b'l', b'u', b'e', b'k', b'e', b'y', 0, 5, 3];
+        let deserialized = Heap::deserialize(&serialized).unwrap();
+        assert_eq!(deserialized, HeapTuple::from("key", "value"),);
+    }
+
+    #[test]
+    fn test_heap_serde() {
+        let key = "key";
+        let value = "value";
+
+        let serialized = Heap::serialize(&key, &value);
+        let deserialized = Heap::deserialize(&serialized).unwrap();
+
+        assert_eq!(deserialized, HeapTuple::from(key, value),);
+    }
+
+    #[test]
     fn test_heap_get() {
         let mut heap_file = tempfile().unwrap();
 
@@ -340,7 +309,6 @@ fn search_reverse_chunked(key: &str, mut file: &fs::File) -> Result<Option<Strin
 
         assert_eq!(value, Some("value".to_string()));
     }
-}
 
     #[test]
     fn test_heap_put_get_multiple() {
@@ -359,3 +327,4 @@ fn search_reverse_chunked(key: &str, mut file: &fs::File) -> Result<Option<Strin
         assert_eq!(value2, Some("value2".to_string()));
         assert_eq!(value3, Some("value3".to_string()));
     }
+}
