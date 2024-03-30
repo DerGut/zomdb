@@ -104,7 +104,7 @@ unsafe fn from_cstr(s: *const ffi::c_char) -> Result<String, Error> {
     let cstr = unsafe { ffi::CStr::from_ptr(s) };
     match cstr.to_str() {
         Ok(s) => Ok(s.to_owned()),
-        Err(e) => Err(Error::InputError(InputError::Utf8Error(e))),
+        Err(e) => Err(Error::Input(InputError::Utf8(e))),
     }
 }
 
@@ -137,11 +137,11 @@ pub const ERR_DATA: i32 = 50;
 
 fn to_errno(e: crate::Error) -> errno::Errno {
     let no = match e {
-        Error::IOError(_) => ERR_IO,
-        Error::InputError(InputError::Utf8Error(_)) => ERR_UTF8,
-        Error::InputError(InputError::KeySizeError(_)) => ERR_KEY_SIZE,
-        Error::InputError(InputError::ValueSizeError(_)) => ERR_VALUE_SIZE,
-        Error::DataError(_) => ERR_DATA,
+        Error::IO(_) => ERR_IO,
+        Error::Input(InputError::Utf8(_)) => ERR_UTF8,
+        Error::Input(InputError::KeySize(_)) => ERR_KEY_SIZE,
+        Error::Input(InputError::ValueSize(_)) => ERR_VALUE_SIZE,
+        Error::Data(_) => ERR_DATA,
     };
 
     errno::Errno(no)

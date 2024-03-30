@@ -19,11 +19,11 @@ trait Index {
 
 #[derive(Debug)]
 enum Error {
-    InputError(InputError),
-    IOError(io::Error),
+    Input(InputError),
+    IO(io::Error),
 
     /// Indicates that the data on disk was corrupted.
-    DataError(DeserializationError),
+    Data(DeserializationError),
 }
 
 impl error::Error for Error {}
@@ -31,18 +31,18 @@ impl error::Error for Error {}
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::InputError(e) => write!(f, "Input error: {}", e),
-            Error::IOError(e) => write!(f, "IO error: {}", e),
-            Error::DataError(e) => write!(f, "Data error: {}", e),
+            Error::Input(e) => write!(f, "Input error: {}", e),
+            Error::IO(e) => write!(f, "IO error: {}", e),
+            Error::Data(e) => write!(f, "Data error: {}", e),
         }
     }
 }
 
 #[derive(Debug)]
 enum InputError {
-    Utf8Error(str::Utf8Error),
-    KeySizeError(usize),
-    ValueSizeError(usize),
+    Utf8(str::Utf8Error),
+    KeySize(usize),
+    ValueSize(usize),
 }
 
 impl error::Error for InputError {}
@@ -50,11 +50,11 @@ impl error::Error for InputError {}
 impl fmt::Display for InputError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            InputError::Utf8Error(e) => write!(f, "UTF-8 error: {}", e),
-            InputError::KeySizeError(size) => {
+            InputError::Utf8(e) => write!(f, "UTF-8 error: {}", e),
+            InputError::KeySize(size) => {
                 write!(f, "Key size not in [1,{}]: {}", MAX_KEY_SIZE, size)
             }
-            InputError::ValueSizeError(size) => {
+            InputError::ValueSize(size) => {
                 write!(f, "Value size not in [1,{}]: {}", MAX_VALUE_SIZE, size)
             }
         }
@@ -77,7 +77,7 @@ impl Heap {
             .append(true)
             .create(true)
             .open(path)
-            .map_err(Error::IOError)?;
+            .map_err(Error::IO)?;
         Ok(Self::new(file))
     }
 
@@ -144,17 +144,15 @@ impl HeapTuple {
 impl Index for Heap {
     fn put(&mut self, key: &str, value: &str) -> Result<(), Error> {
         if key.len() > MAX_KEY_SIZE || key.is_empty() {
-            return Err(Error::InputError(InputError::KeySizeError(key.len())));
+            return Err(Error::Input(InputError::KeySize(key.len())));
         }
         if value.len() > MAX_VALUE_SIZE {
-            return Err(Error::InputError(InputError::ValueSizeError(value.len())));
+            return Err(Error::Input(InputError::ValueSize(value.len())));
         }
 
         let bytes = Self::serialize(key, value);
 
-        self.file
-            .write_all(bytes.as_slice())
-            .map_err(Error::IOError)
+        self.file.write_all(bytes.as_slice()).map_err(Error::IO)
     }
 
     fn get(&mut self, key: &str) -> Result<Option<String>, Error> {
@@ -165,19 +163,19 @@ impl Index for Heap {
 fn search_reverse(key: &str, mut file: &fs::File) -> Result<Option<String>, Error> {
     const MAX_TUPLE_SIZE: usize = MAX_KEY_SIZE + MAX_VALUE_SIZE + 3;
 
-    file.seek(io::SeekFrom::End(0)).map_err(Error::IOError)?;
+    file.seek(io::SeekFrom::End(0)).map_err(Error::IO)?;
 
-    let file_size = file.metadata().map_err(Error::IOError)?.len() as usize;
+    let file_size = file.metadata().map_err(Error::IO)?.len() as usize;
 
     let mut bytes_remaining = file_size;
     while bytes_remaining > 0 {
         let current_chunk_size = cmp::min(MAX_TUPLE_SIZE, bytes_remaining);
 
         file.seek(io::SeekFrom::Current(-(current_chunk_size as i64)))
-            .map_err(Error::IOError)?;
+            .map_err(Error::IO)?;
 
         let mut chunk_buffer = vec![0u8; current_chunk_size];
-        file.read_exact(&mut chunk_buffer).map_err(Error::IOError)?;
+        file.read_exact(&mut chunk_buffer).map_err(Error::IO)?;
 
         const MIN_TUPLE_SIZE: usize = 4;
         let mut unread_chunk_bytes = current_chunk_size;
@@ -191,7 +189,7 @@ fn search_reverse(key: &str, mut file: &fs::File) -> Result<Option<String>, Erro
                     // re-enter the main chunk read loop.
                     panic!("TODO");
                 }
-                Err(e) => return Err(Error::DataError(e)),
+                Err(e) => return Err(Error::Data(e)),
             };
 
             if tuple.key == key {
