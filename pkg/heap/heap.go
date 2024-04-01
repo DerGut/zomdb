@@ -9,12 +9,22 @@ package heap
 */
 import "C"
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"syscall"
 	"unsafe"
 )
 
+// Heap is an append-only log of key-value pairs.
+//
+// A Heap has the following limitations around key/ value choices:
+//   - Keys and values must be at least 1 byte in size
+//   - Keys must be at most 256 bytes in size
+//   - Values must be at most 1024 bytes in size
+//   - Keys and values must not contains null bytes (this is a current
+//     limitation based on the fact, that the C API does not pass around byte
+//     array lengths)
 type Heap struct {
 	heap *C.struct_Heap
 }
@@ -35,21 +45,32 @@ func (h *Heap) Close() {
 	C.destroy_heap(h.heap)
 }
 
-func (h *Heap) Get(key string) (string, error) {
-	ck := C.CString(key)
+func (h *Heap) Get(key []byte) ([]byte, error) {
+	if bytes.Contains(key, []byte{0}) {
+		return nil, errors.New("key contains null byte")
+	}
+
+	ck := C.CString(string(key))
 	defer C.free(unsafe.Pointer(ck))
 
 	cv, errno := C.heap_get(h.heap, ck)
 	if err := goErr(errno); err != nil {
-		return "", err
+		return nil, err
 	}
 
-	return C.GoString(cv), nil
+	return []byte(C.GoString(cv)), nil
 }
 
-func (h *Heap) Set(key, value string) error {
-	ck := C.CString(key)
-	cv := C.CString(value)
+func (h *Heap) Set(key, value []byte) error {
+	switch {
+	case bytes.Contains(key, []byte{0}):
+		return errors.New("key contains null byte")
+	case bytes.Contains(value, []byte{0}):
+		return errors.New("value contains null byte")
+	}
+
+	ck := C.CString(string(key))
+	cv := C.CString(string(value))
 	defer C.free(unsafe.Pointer(ck))
 	defer C.free(unsafe.Pointer(cv))
 

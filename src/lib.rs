@@ -13,8 +13,8 @@ const MAX_KEY_SIZE: usize = 256;
 const MAX_VALUE_SIZE: usize = 1024;
 
 trait Index {
-    fn put(&mut self, key: &str, value: &str) -> Result<(), Error>;
-    fn get(&mut self, key: &str) -> Result<Option<String>, Error>;
+    fn put(&mut self, key: &[u8], value: &[u8]) -> Result<(), Error>;
+    fn get(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>, Error>;
 }
 
 #[derive(Debug)]
@@ -81,14 +81,14 @@ impl Heap {
         Ok(Self::new(file))
     }
 
-    fn serialize(key: &str, value: &str) -> Vec<u8> {
+    fn serialize(key: &[u8], value: &[u8]) -> Vec<u8> {
         assert!(key.len() <= MAX_KEY_SIZE);
         assert!(value.len() <= MAX_VALUE_SIZE);
         // 8bit for key size
         // 16bit for value size
         let mut data = Vec::with_capacity(key.len() + value.len() + 1 + 2);
-        data.extend_from_slice(value.as_bytes());
-        data.extend_from_slice(key.as_bytes());
+        data.extend_from_slice(value);
+        data.extend_from_slice(key);
         data.push((value.len() >> 8) as u8);
         data.push(value.len() as u8);
         data.push(key.len() as u8);
@@ -112,11 +112,8 @@ impl Heap {
             return Err(DeserializationError::DataTooShort);
         }
 
-        let key = std::str::from_utf8(&data[data.len() - 3 - key_size..data.len() - 3]).unwrap();
-        let value = std::str::from_utf8(
-            &data[data.len() - 3 - key_size - value_size..data.len() - 3 - key_size],
-        )
-        .unwrap();
+        let key = &data[data.len() - 3 - key_size..data.len() - 3];
+        let value = &data[data.len() - 3 - key_size - value_size..data.len() - 3 - key_size];
 
         Ok(HeapTuple::from(key, value))
     }
@@ -124,15 +121,15 @@ impl Heap {
 
 #[derive(Debug, PartialEq)]
 struct HeapTuple {
-    key: String,
-    value: String,
+    key: Vec<u8>,
+    value: Vec<u8>,
 }
 
 impl HeapTuple {
-    fn from(key: &str, value: &str) -> Self {
+    fn from(key: &[u8], value: &[u8]) -> Self {
         HeapTuple {
-            key: key.to_string(),
-            value: value.to_string(),
+            key: key.to_vec(),
+            value: value.to_vec(),
         }
     }
 
@@ -142,7 +139,7 @@ impl HeapTuple {
 }
 
 impl Index for Heap {
-    fn put(&mut self, key: &str, value: &str) -> Result<(), Error> {
+    fn put(&mut self, key: &[u8], value: &[u8]) -> Result<(), Error> {
         if key.len() > MAX_KEY_SIZE || key.is_empty() {
             return Err(Error::Input(InputError::KeySize(key.len())));
         }
@@ -155,12 +152,12 @@ impl Index for Heap {
         self.file.write_all(bytes.as_slice()).map_err(Error::IO)
     }
 
-    fn get(&mut self, key: &str) -> Result<Option<String>, Error> {
+    fn get(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>, Error> {
         search_reverse(key, &self.file)
     }
 }
 
-fn search_reverse(key: &str, mut file: &fs::File) -> Result<Option<String>, Error> {
+fn search_reverse(key: &[u8], mut file: &fs::File) -> Result<Option<Vec<u8>>, Error> {
     const MAX_TUPLE_SIZE: usize = MAX_KEY_SIZE + MAX_VALUE_SIZE + 3;
 
     file.seek(io::SeekFrom::End(0)).map_err(Error::IO)?;
@@ -239,7 +236,7 @@ mod test {
 
     #[test]
     fn test_heap_serialize() {
-        let serialized = Heap::serialize("key", "value");
+        let serialized = Heap::serialize(b"key", b"value");
         assert_eq!(
             serialized,
             vec![b'v', b'a', b'l', b'u', b'e', b'k', b'e', b'y', 0, 5, 3]
@@ -250,15 +247,15 @@ mod test {
     fn test_heap_deserialize() {
         let serialized = vec![b'v', b'a', b'l', b'u', b'e', b'k', b'e', b'y', 0, 5, 3];
         let deserialized = Heap::deserialize(&serialized).unwrap();
-        assert_eq!(deserialized, HeapTuple::from("key", "value"),);
+        assert_eq!(deserialized, HeapTuple::from(b"key", b"value"));
     }
 
     #[test]
     fn test_heap_serde() {
-        let key = "key";
-        let value = "value";
+        let key = b"key";
+        let value = b"value";
 
-        let serialized = Heap::serialize(&key, &value);
+        let serialized = Heap::serialize(key, value);
         let deserialized = Heap::deserialize(&serialized).unwrap();
 
         assert_eq!(deserialized, HeapTuple::from(key, value),);
@@ -269,14 +266,14 @@ mod test {
         let mut heap_file = tempfile().unwrap();
 
         heap_file
-            .write_all(&Heap::serialize("key", "value"))
+            .write_all(&Heap::serialize(b"key", b"value"))
             .unwrap();
         heap_file.rewind().unwrap();
 
         let mut heap = Heap::new(heap_file);
-        let value = heap.get("key").unwrap();
+        let value = heap.get(b"key").unwrap();
 
-        assert_eq!(value, Some("value".to_string()));
+        assert_eq!(value, Some(b"value".to_vec()));
     }
 
     #[test]
@@ -284,7 +281,7 @@ mod test {
         let heap_file = tempfile().unwrap();
 
         let mut heap = Heap::new(heap_file);
-        heap.put("key", "value").unwrap();
+        heap.put(b"key", b"value").unwrap();
 
         heap.file.rewind().unwrap();
 
@@ -302,10 +299,10 @@ mod test {
         let heap_file = tempfile().unwrap();
         let mut heap = Heap::new(heap_file);
 
-        heap.put("key", "value").unwrap();
-        let value = heap.get("key").unwrap();
+        heap.put(b"key", b"value").unwrap();
+        let value = heap.get(b"key").unwrap();
 
-        assert_eq!(value, Some("value".to_string()));
+        assert_eq!(value, Some(b"value".to_vec()));
     }
 
     #[test]
@@ -313,16 +310,27 @@ mod test {
         let heap_file = tempfile().unwrap();
         let mut heap = Heap::new(heap_file);
 
-        heap.put("key1", "value1").unwrap();
-        heap.put("key2", "value2").unwrap();
-        heap.put("key3", "value3").unwrap();
+        heap.put(b"key1", b"value1").unwrap();
+        heap.put(b"key2", b"value2").unwrap();
+        heap.put(b"key3", b"value3").unwrap();
 
-        let value1 = heap.get("key1").unwrap();
-        let value2 = heap.get("key2").unwrap();
-        let value3 = heap.get("key3").unwrap();
+        let value1 = heap.get(b"key1").unwrap();
+        let value2 = heap.get(b"key2").unwrap();
+        let value3 = heap.get(b"key3").unwrap();
 
-        assert_eq!(value1, Some("value1".to_string()));
-        assert_eq!(value2, Some("value2".to_string()));
-        assert_eq!(value3, Some("value3".to_string()));
+        assert_eq!(value1, Some(b"value1".to_vec()));
+        assert_eq!(value2, Some(b"value2".to_vec()));
+        assert_eq!(value3, Some(b"value3".to_vec()));
+    }
+
+    #[test]
+    fn test_heap_put_get_non_utf8_bytes() {
+        let heap_file = tempfile().unwrap();
+        let mut heap = Heap::new(heap_file);
+
+        heap.put(b"key", b"ke\xf2").unwrap();
+        let value = heap.get(b"key").unwrap();
+
+        assert_eq!(value, Some(b"ke\xf2".to_vec()));
     }
 }

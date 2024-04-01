@@ -13,11 +13,11 @@ func Example() {
 		panic(err)
 	}
 
-	if err := db.Set(context.Background(), "key", "value"); err != nil {
+	if err := db.Set(context.Background(), []byte("key"), []byte("value")); err != nil {
 		panic(err)
 	}
 
-	value, err := db.Get(context.Background(), "key")
+	value, err := db.Get(context.Background(), []byte("key"))
 	if err != nil {
 		panic(err)
 	}

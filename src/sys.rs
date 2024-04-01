@@ -6,11 +6,11 @@ use std::{ffi, mem::transmute};
 
 #[no_mangle]
 pub unsafe extern "C" fn create_heap(file_name_cstr: *const ffi::c_char) -> *mut Heap {
-    let file_name = match from_cstr(file_name_cstr) {
+    let file_name = match string_from_cstr(file_name_cstr) {
         Ok(s) => s,
         Err(e) => {
             println!("zomdb: file_name: {:?}", e);
-            errno::set_errno(to_errno(e));
+            errno::set_errno(to_errno(Error::Input(e)));
             return std::ptr::null_mut();
         }
     };
@@ -29,6 +29,15 @@ pub unsafe extern "C" fn create_heap(file_name_cstr: *const ffi::c_char) -> *mut
     unsafe { transmute(Box::new(heap)) }
 }
 
+/// Get a value from the heap.
+///
+/// Returns a pointer to the value if found, or null if not found. If not
+/// found, the global errno will be set to ERR_NOT_FOUND.
+///
+/// If an error occurs, the global errno will be set to the appropriate error.
+///
+/// The accepted key is a null-terminated string. Any calling code must
+/// therefore guarantee that no null bytes are present in the key.
 #[no_mangle]
 pub unsafe extern "C" fn heap_get(
     ptr: *mut Heap,
@@ -36,14 +45,7 @@ pub unsafe extern "C" fn heap_get(
 ) -> *const ffi::c_char {
     let heap = unsafe { &mut *ptr };
 
-    let key = match from_cstr(key_cstr) {
-        Ok(s) => s,
-        Err(e) => {
-            println!("zomdb: key: {:?}", e);
-            errno::set_errno(to_errno(e));
-            return std::ptr::null();
-        }
-    };
+    let key = bytes_from_cstr(key_cstr);
 
     match heap.get(&key) {
         Ok(Some(value)) => to_cstr(&value),
@@ -59,6 +61,13 @@ pub unsafe extern "C" fn heap_get(
     }
 }
 
+/// Set a key and value in the heap.
+///
+/// If an error occurs, the global errno will be set to the appropriate error.
+///
+/// The accepted key and value are null-terminated strings. Any calling code
+/// must therefore guarantee that no null bytes are present in the key or
+/// value.
 #[no_mangle]
 pub unsafe extern "C" fn heap_set(
     ptr: *mut Heap,
@@ -67,23 +76,8 @@ pub unsafe extern "C" fn heap_set(
 ) {
     let heap = unsafe { &mut *ptr };
 
-    let key = match from_cstr(key_cstr) {
-        Ok(s) => s,
-        Err(e) => {
-            println!("zomdb: key: {:?}", e);
-            errno::set_errno(to_errno(e));
-            return;
-        }
-    };
-
-    let value = match from_cstr(value_cstr) {
-        Ok(s) => s,
-        Err(e) => {
-            println!("zomdb: value: {:?}", e);
-            errno::set_errno(to_errno(e));
-            return;
-        }
-    };
+    let key = bytes_from_cstr(key_cstr);
+    let value = bytes_from_cstr(value_cstr);
 
     match heap.put(&key, &value) {
         Ok(_) => {}
@@ -100,15 +94,18 @@ pub unsafe extern "C" fn destroy_heap(ptr: *mut Heap) {
     drop(heap);
 }
 
-unsafe fn from_cstr(s: *const ffi::c_char) -> Result<String, Error> {
+unsafe fn string_from_cstr(s: *const ffi::c_char) -> Result<String, InputError> {
     let cstr = unsafe { ffi::CStr::from_ptr(s) };
-    match cstr.to_str() {
-        Ok(s) => Ok(s.to_owned()),
-        Err(e) => Err(Error::Input(InputError::Utf8(e))),
-    }
+    let s = cstr.to_str().map_err(InputError::Utf8)?;
+    Ok(s.to_string())
 }
 
-unsafe fn to_cstr(s: &str) -> *const ffi::c_char {
+unsafe fn bytes_from_cstr(s: *const ffi::c_char) -> Vec<u8> {
+    let cstr = unsafe { ffi::CStr::from_ptr(s) };
+    cstr.to_bytes().to_vec()
+}
+
+unsafe fn to_cstr(s: &[u8]) -> *const ffi::c_char {
     let cstr = ffi::CString::new(s).unwrap();
     cstr.into_raw()
 }

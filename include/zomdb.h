@@ -41,8 +41,28 @@ typedef struct Heap Heap;
 
 struct Heap *create_heap(const char *file_name_cstr);
 
+/**
+ * Get a value from the heap.
+ *
+ * Returns a pointer to the value if found, or null if not found. If not
+ * found, the global errno will be set to ERR_NOT_FOUND.
+ *
+ * If an error occurs, the global errno will be set to the appropriate error.
+ *
+ * The accepted key is a null-terminated string. Any calling code must
+ * therefore guarantee that no null bytes are present in the key.
+ */
 const char *heap_get(struct Heap *ptr, const char *key_cstr);
 
+/**
+ * Set a key and value in the heap.
+ *
+ * If an error occurs, the global errno will be set to the appropriate error.
+ *
+ * The accepted key and value are null-terminated strings. Any calling code
+ * must therefore guarantee that no null bytes are present in the key or
+ * value.
+ */
 void heap_set(struct Heap *ptr, const char *key_cstr, const char *value_cstr);
 
 void destroy_heap(struct Heap *ptr);
