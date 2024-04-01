@@ -128,8 +128,7 @@ struct HeapTuple {
 impl HeapTuple {
     fn from(key: &[u8], value: &[u8]) -> Self {
         HeapTuple {
-            // TODO: check again, what's more idiomatic?
-            key: key.to_owned(),
+            key: key.to_vec(),
             value: value.to_vec(),
         }
     }
@@ -190,7 +189,6 @@ fn search_reverse(key: &[u8], mut file: &fs::File) -> Result<Option<Vec<u8>>, Er
                 Err(e) => return Err(Error::Data(e)),
             };
 
-            // TODO: How does this compare? Should we use mem::cmp instead?
             if tuple.key == key {
                 return Ok(Some(tuple.value));
             }
