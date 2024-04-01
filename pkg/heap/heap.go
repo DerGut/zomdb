@@ -15,6 +15,15 @@ import (
 	"unsafe"
 )
 
+// Heap is an append-only log of key-value pairs.
+//
+// A Heap has the following limitations around key/ value choices:
+//   - Keys and values must be at least 1 byte in size
+//   - Keys must be at most 256 bytes in size
+//   - Values must be at most 1024 bytes in size
+//   - Keys and values must not contains null bytes (this is a current
+//     limitation based on the fact, that the C API does not pass around byte
+//     array lengths)
 type Heap struct {
 	heap *C.struct_Heap
 }
