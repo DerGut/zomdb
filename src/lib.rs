@@ -142,7 +142,7 @@ impl HeapTuple {
 impl Index for Heap {
     fn put(&mut self, key: &[u8], value: &[u8]) -> Result<(), Error> {
         if key.len() > MAX_KEY_SIZE || key.is_empty() {
-            return Err(Error::InputError(InputError::KeySizeError(key.len())));
+            return Err(Error::Input(InputError::KeySize(key.len())));
         }
         if value.len() > MAX_VALUE_SIZE {
             return Err(Error::Input(InputError::ValueSize(value.len())));
