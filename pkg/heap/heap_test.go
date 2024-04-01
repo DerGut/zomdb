@@ -1,6 +1,7 @@
 package heap_test
 
 import (
+	"bytes"
 	"fmt"
 	"path/filepath"
 	"testing"
@@ -11,16 +12,16 @@ import (
 func TestHeap(t *testing.T) {
 	h := newTestHeap(t)
 
-	if err := h.Set("key", "value"); err != nil {
+	if err := h.Set([]byte("key"), []byte("value")); err != nil {
 		t.Fatalf("set: expected no error, got %v", err)
 	}
 
-	value, err := h.Get("key")
+	value, err := h.Get([]byte("key"))
 	if err != nil {
 		t.Fatalf("get: expected no error, got %v", err)
 	}
 
-	if value != "value" {
+	if !bytes.Equal(value, []byte("value")) {
 		t.Errorf("expected value to be \"value\", got %q", value)
 	}
 }
@@ -29,23 +30,23 @@ func TestHeapSetAndGetMultiple(t *testing.T) {
 	h := newTestHeap(t)
 
 	for i := 0; i < 3; i++ {
-		key := fmt.Sprintf("key_%d", i+1)
-		value := fmt.Sprintf("value_%d", i+1)
+		key := []byte(fmt.Sprintf("key_%d", i+1))
+		value := []byte(fmt.Sprintf("value_%d", i+1))
 		if err := h.Set(key, value); err != nil {
 			t.Fatalf("set %d: expected no error, got %v", i+1, err)
 		}
 	}
 
 	for i := 0; i < 3; i++ {
-		key := fmt.Sprintf("key_%d", i+1)
-		value := fmt.Sprintf("value_%d", i+1)
+		key := []byte(fmt.Sprintf("key_%d", i+1))
+		value := []byte(fmt.Sprintf("value_%d", i+1))
 
 		got, err := h.Get(key)
 		if err != nil {
 			t.Fatalf("get %d: expected no error, got %v", i+1, err)
 		}
 
-		if got != value {
+		if !bytes.Equal(got, value) {
 			t.Errorf("expected value to be %q, got %q", value, got)
 		}
 	}
@@ -75,8 +76,8 @@ func TestHeapSetOverwrite(t *testing.T) {
 func FuzzHeapSet(f *testing.F) {
 	h := newTestHeap(f)
 
-	f.Add("key", "value")
-	f.Fuzz(func(t *testing.T, a string, b string) {
+	f.Add([]byte("key"), []byte("value"))
+	f.Fuzz(func(t *testing.T, a []byte, b []byte) {
 		if err := h.Set(a, b); err != nil {
 			return
 		}

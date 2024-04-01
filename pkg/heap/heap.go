@@ -35,21 +35,21 @@ func (h *Heap) Close() {
 	C.destroy_heap(h.heap)
 }
 
-func (h *Heap) Get(key string) (string, error) {
-	ck := C.CString(key)
+func (h *Heap) Get(key []byte) ([]byte, error) {
+	ck := C.CString(string(key))
 	defer C.free(unsafe.Pointer(ck))
 
 	cv, errno := C.heap_get(h.heap, ck)
 	if err := goErr(errno); err != nil {
-		return "", err
+		return nil, err
 	}
 
-	return C.GoString(cv), nil
+	return []byte(C.GoString(cv)), nil
 }
 
-func (h *Heap) Set(key, value string) error {
-	ck := C.CString(key)
-	cv := C.CString(value)
+func (h *Heap) Set(key, value []byte) error {
+	ck := C.CString(string(key))
+	cv := C.CString(string(value))
 	defer C.free(unsafe.Pointer(ck))
 	defer C.free(unsafe.Pointer(cv))
 
