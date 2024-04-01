@@ -62,6 +62,31 @@ func TestHeapSetAndGetMultiple(t *testing.T) {
 		}
 	}
 
+func TestHeapSetOverwrite(t *testing.T) {
+	name := filepath.Join(t.TempDir(), "test.zomdb")
+
+	h, err := heap.New(name)
+	if err != nil {
+		t.Fatalf("new: expected no error, got %v", err)
+	}
+	defer h.Close()
+
+	if err := h.Set("color", "red"); err != nil {
+		t.Fatalf("set color=red: %v", err)
+	}
+
+	if err := h.Set("color", "green"); err != nil {
+		t.Fatalf("set color=green: %v", err)
+	}
+
+	value, err := h.Get("color")
+	if err != nil {
+		t.Fatalf("get color: %v", err)
+	}
+
+	if value != "green" {
+		t.Errorf("want color=green, got: %s", value)
+	}
 }
 
 func FuzzHeapSet(f *testing.F) {
