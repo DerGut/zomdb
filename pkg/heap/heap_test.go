@@ -55,20 +55,20 @@ func TestHeapSetAndGetMultiple(t *testing.T) {
 func TestHeapSetOverwrite(t *testing.T) {
 	h := newTestHeap(t)
 
-	if err := h.Set("color", "red"); err != nil {
+	if err := h.Set([]byte("color"), []byte("red")); err != nil {
 		t.Fatalf("set color=red: %v", err)
 	}
 
-	if err := h.Set("color", "green"); err != nil {
+	if err := h.Set([]byte("color"), []byte("green")); err != nil {
 		t.Fatalf("set color=green: %v", err)
 	}
 
-	value, err := h.Get("color")
+	value, err := h.Get([]byte("color"))
 	if err != nil {
 		t.Fatalf("get color: %v", err)
 	}
 
-	if value != "green" {
+	if !bytes.Equal(value, []byte("green")) {
 		t.Errorf("want color=green, got: %s", value)
 	}
 }
