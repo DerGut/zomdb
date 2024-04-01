@@ -9,6 +9,7 @@ package heap
 */
 import "C"
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"syscall"
@@ -45,6 +46,10 @@ func (h *Heap) Close() {
 }
 
 func (h *Heap) Get(key []byte) ([]byte, error) {
+	if bytes.Contains(key, []byte{0}) {
+		return nil, errors.New("key contains null byte")
+	}
+
 	ck := C.CString(string(key))
 	defer C.free(unsafe.Pointer(ck))
 
@@ -57,6 +62,13 @@ func (h *Heap) Get(key []byte) ([]byte, error) {
 }
 
 func (h *Heap) Set(key, value []byte) error {
+	switch {
+	case bytes.Contains(key, []byte{0}):
+		return errors.New("key contains null byte")
+	case bytes.Contains(value, []byte{0}):
+		return errors.New("value contains null byte")
+	}
+
 	ck := C.CString(string(key))
 	cv := C.CString(string(value))
 	defer C.free(unsafe.Pointer(ck))

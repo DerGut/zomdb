@@ -29,6 +29,15 @@ pub unsafe extern "C" fn create_heap(file_name_cstr: *const ffi::c_char) -> *mut
     unsafe { transmute(Box::new(heap)) }
 }
 
+/// Get a value from the heap.
+///
+/// Returns a pointer to the value if found, or null if not found. If not
+/// found, the global errno will be set to ERR_NOT_FOUND.
+///
+/// If an error occurs, the global errno will be set to the appropriate error.
+///
+/// The accepted key is a null-terminated string. Any calling code must
+/// therefore guarantee that no null bytes are present in the key.
 #[no_mangle]
 pub unsafe extern "C" fn heap_get(
     ptr: *mut Heap,
@@ -52,6 +61,13 @@ pub unsafe extern "C" fn heap_get(
     }
 }
 
+/// Set a key and value in the heap.
+///
+/// If an error occurs, the global errno will be set to the appropriate error.
+///
+/// The accepted key and value are null-terminated strings. Any calling code
+/// must therefore guarantee that no null bytes are present in the key or
+/// value.
 #[no_mangle]
 pub unsafe extern "C" fn heap_set(
     ptr: *mut Heap,

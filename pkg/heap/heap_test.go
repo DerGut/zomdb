@@ -73,6 +73,28 @@ func TestHeapSetOverwrite(t *testing.T) {
 	}
 }
 
+func TestNullByte(t *testing.T) {
+	h := newTestHeap(t)
+
+	t.Run("setKey", func(t *testing.T) {
+		if err := h.Set([]byte("key\x00"), []byte("value")); err == nil {
+			t.Error("expected error")
+		}
+	})
+
+	t.Run("setValue", func(t *testing.T) {
+		if err := h.Set([]byte("key"), []byte("value\x00")); err == nil {
+			t.Error("expected error")
+		}
+	})
+
+	t.Run("get", func(t *testing.T) {
+		if _, err := h.Get([]byte("key\x00")); err == nil {
+			t.Error("expected error")
+		}
+	})
+}
+
 func FuzzHeapSet(f *testing.F) {
 	h := newTestHeap(f)
 
