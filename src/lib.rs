@@ -326,9 +326,11 @@ mod test {
     #[test]
     fn test_heap_put_get_non_utf8_bytes() {
         let heap_file = tempfile().unwrap();
-        let heap = Heap::new(heap_file);
+        let mut heap = Heap::new(heap_file);
 
-        _ = heap;
-        panic!("todo: find an example byte string")
+        heap.put(b"key", b"ke\xf2").unwrap();
+        let value = heap.get(b"key").unwrap();
+
+        assert_eq!(value, Some(b"ke\xf2".to_vec()));
     }
 }
