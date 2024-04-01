@@ -29,10 +29,10 @@ func (d *DB) Close() error {
 	return nil
 }
 
-func (d *DB) Get(_ context.Context, key string) (string, error) {
+func (d *DB) Get(_ context.Context, key []byte) ([]byte, error) {
 	return d.heap.Get(key)
 }
 
-func (d *DB) Set(_ context.Context, key string, value string) error {
+func (d *DB) Set(_ context.Context, key []byte, value []byte) error {
 	return d.heap.Set(key, value)
 }
