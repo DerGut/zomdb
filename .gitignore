@@ -4,3 +4,4 @@
 
 # Cargo files
 /target
+/crates/zomdb-sys/target

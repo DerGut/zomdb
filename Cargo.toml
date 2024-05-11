@@ -1,25 +1,5 @@
-[package]
-name = "zomdb"
-version = "0.1.0"
-edition = "2021"
+[workspace]
+members = [ "crates/zomdb", "crates/zomdb-sys" ]
+resolver = "2"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[lib]
-# A static system library will be produced. This is different from other
-# library outputs in that the compiler will never attempt to link to staticlib
-# outputs. The purpose of this output type is to create a static library
-# containing all of the local crate's code along with all upstream
-# dependencies. This output type will create *.a files on Linux, macOS and
-# Windows (MinGW), and *.lib files on Windows (MSVC). This format is
-# recommended for use in situations such as linking Rust code into an existing
-# non-Rust application because it will not have dynamic dependencies on other
-# Rust code.
-crate_type = ["staticlib"]
-
-[build-dependencies]
-cbindgen = "0.26.0"
-
-[dependencies]
-errno = "0.3.8"
-tempfile = "3.10.0"
