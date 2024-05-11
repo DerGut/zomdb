@@ -1,85 +1,24 @@
-use std::{
-    cmp,
-    collections::HashSet,
-    error, fmt, fs,
-    io::{self, Read, Seek, Write},
-    path::{self},
-    str,
-};
-
-mod sys;
-
-/// The maximum byte size of keys.
-const MAX_KEY_SIZE: usize = 256;
-
-/// The maximum byte size of values.
-const MAX_VALUE_SIZE: usize = 1024;
-
-/// The maximum byte size of a tuple on disk.
-const MAX_TUPLE_SIZE: usize = MAX_KEY_SIZE + MAX_VALUE_SIZE + 3;
-
-/// The minimum byte size of a tuple on disk.
-const MIN_TUPLE_SIZE: usize = 1+3; // 1 byte key + 0 byte value
-
-trait Index {
-    fn put(&mut self, key: &[u8], value: &[u8]) -> Result<(), Error>;
-    fn get(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>, Error>;
-}
-
-#[derive(Debug)]
-pub enum Error {
-    Input(InputError),
-    IO(io::Error),
-
-    /// Indicates that the data on disk was corrupted.
-    Data(DeserializationError),
-}
-
-impl error::Error for Error {}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::Input(e) => write!(f, "Input error: {}", e),
-            Error::IO(e) => write!(f, "IO error: {}", e),
-            Error::Data(e) => write!(f, "Data error: {}", e),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum InputError {
-    Utf8(str::Utf8Error),
-    KeySize(usize),
-    ValueSize(usize),
-}
-
-impl error::Error for InputError {}
-
-impl fmt::Display for InputError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            InputError::Utf8(e) => write!(f, "UTF-8 error: {}", e),
-            InputError::KeySize(size) => {
-                write!(f, "Key size not in [1,{}]: {}", MAX_KEY_SIZE, size)
-            }
-            InputError::ValueSize(size) => {
-                write!(f, "Value size not in [1,{}]: {}", MAX_VALUE_SIZE, size)
-            }
-        }
-    }
-}
+use std::{cmp, fs, io, path};
+use std::collections::HashSet;
+use std::io::{Read, Seek, Write};
+use crate::{DeserializationError, Error, Index, InputError, MAX_KEY_SIZE, MAX_VALUE_SIZE};
 
 pub struct Heap {
     file: fs::File,
 }
 
 impl Heap {
+    /// The maximum byte size of a tuple on disk.
+    const MAX_TUPLE_SIZE: usize = MAX_KEY_SIZE + MAX_VALUE_SIZE + 3;
+
+    /// The minimum byte size of a tuple on disk.
+    const MIN_TUPLE_SIZE: usize = 1+3; // 1 byte key + 0 byte value
+
     fn new(file: fs::File) -> Self {
         Self { file }
     }
 
-    fn from(path: path::PathBuf) -> Result<Self, Error> {
+    pub fn from(path: path::PathBuf) -> Result<Self, Error> {
         let file = fs::OpenOptions::new()
             .read(true)
             .write(true)
@@ -112,7 +51,7 @@ impl Heap {
     }
 
     fn deserialize(data: &[u8]) -> Result<HeapTuple, DeserializationError> {
-        if data.len() < MIN_TUPLE_SIZE {
+        if data.len() < Self::MIN_TUPLE_SIZE {
             return Err(DeserializationError::DataTooShort);
         }
 
@@ -208,7 +147,8 @@ impl<'a> Iterator for Iter<'a> {
 }
 
 impl<'a> Iter<'a> {
-    const DEFAULT_CHUNK_SIZE: usize = MAX_TUPLE_SIZE;
+
+    const DEFAULT_CHUNK_SIZE: usize = Heap::MAX_TUPLE_SIZE;
 
     fn next_iter(&mut self) -> Result<Option<HeapTuple>, Error> {
         if !self.initialized {
@@ -325,29 +265,6 @@ impl Index for Heap {
         }
 
         Ok(None)
-    }
-}
-
-#[derive(Debug)]
-pub enum DeserializationError {
-    KeySizeTooBig,
-    ValueSizeTooBig,
-    DataTooShort,
-}
-
-impl error::Error for DeserializationError {}
-
-impl fmt::Display for DeserializationError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            DeserializationError::KeySizeTooBig => write!(f, "Key size too big"),
-            DeserializationError::ValueSizeTooBig => {
-                write!(f, "Value size too big")
-            }
-            DeserializationError::DataTooShort => {
-                write!(f, "data buffer too short")
-            }
-        }
     }
 }
 
@@ -509,7 +426,7 @@ mod test {
         let key_size = MAX_KEY_SIZE;
         let value_size = test_tuple_size - key_size;
 
-        assert!(test_tuple_size <= MAX_TUPLE_SIZE, "test_tuple_size too large");
+        assert!(test_tuple_size <= Heap::MAX_TUPLE_SIZE, "test_tuple_size too large");
         assert!(value_size <= MAX_VALUE_SIZE, "value_size too large");
 
         let key1 = vec![1u8; key_size];
@@ -528,3 +445,4 @@ mod test {
         assert_eq!(tuple1, HeapTuple::from(&key1, &value1));
     }
 }
+

@@ -1,7 +1,5 @@
-//! FFI wrapper for functions exposed from zomdb.
-//!
-//! This module will eventually move to its own zomdb-sys crate.
-use crate::{Error, Heap, Index, InputError};
+//! FFI wrapper for functions exposed from the zomdb crate.
+use zomdb::{Error, Heap, Index, InputError};
 use std::{ffi, mem::transmute};
 
 #[no_mangle]
