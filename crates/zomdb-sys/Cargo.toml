@@ -2,6 +2,7 @@
 name = "zomdb-sys"
 version = "0.1.0"
 edition = "2021"
+publish = false
 
 [lib]
 # A static system library will be produced. This is different from other
