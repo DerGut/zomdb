@@ -1,6 +1,13 @@
 //! FFI wrapper for functions exposed from the zomdb crate.
-use zomdb::{Error, Heap, Index, InputError};
 use std::{ffi, mem::transmute};
+use zomdb::Index;
+
+pub struct Heap {
+    // Heap only delegates to the inner Heap.
+    // This is because it isn't straightforward to generate FFI bindings
+    // for external packages, so we redefine a Heap struct here instead.
+    inner: zomdb::Heap
+}
 
 #[no_mangle]
 pub unsafe extern "C" fn create_heap(file_name_cstr: *const ffi::c_char) -> *mut Heap {
@@ -8,15 +15,15 @@ pub unsafe extern "C" fn create_heap(file_name_cstr: *const ffi::c_char) -> *mut
         Ok(s) => s,
         Err(e) => {
             println!("zomdb: file_name: {:?}", e);
-            errno::set_errno(to_errno(Error::Input(e)));
+            errno::set_errno(to_errno(zomdb::Error::Input(e)));
             return std::ptr::null_mut();
         }
     };
 
     println!("zomdb: opening heap file: {}", file_name);
 
-    let heap = match Heap::from(file_name.into()) {
-        Ok(heap) => heap,
+    let heap = match zomdb::Heap::from(file_name.into()) {
+        Ok(heap) => Heap{ inner: heap },
         Err(e) => {
             println!("zomdb: Heap::from: {:?}", e);
             errno::set_errno(to_errno(e));
@@ -45,7 +52,7 @@ pub unsafe extern "C" fn heap_get(
 
     let key = bytes_from_cstr(key_cstr);
 
-    match heap.get(&key) {
+    match heap.inner.get(&key) {
         Ok(Some(value)) => to_cstr(&value),
         Ok(None) => {
             errno::set_errno(errno::Errno(ERR_NOT_FOUND));
@@ -77,7 +84,7 @@ pub unsafe extern "C" fn heap_set(
     let key = bytes_from_cstr(key_cstr);
     let value = bytes_from_cstr(value_cstr);
 
-    match heap.put(&key, &value) {
+    match heap.inner.put(&key, &value) {
         Ok(_) => {}
         Err(e) => {
             println!("zomdb: heap.put: {:?}", e);
@@ -92,9 +99,9 @@ pub unsafe extern "C" fn destroy_heap(ptr: *mut Heap) {
     drop(heap);
 }
 
-unsafe fn string_from_cstr(s: *const ffi::c_char) -> Result<String, InputError> {
+unsafe fn string_from_cstr(s: *const ffi::c_char) -> Result<String, zomdb::InputError> {
     let cstr = unsafe { ffi::CStr::from_ptr(s) };
-    let s = cstr.to_str().map_err(InputError::Utf8)?;
+    let s = cstr.to_str().map_err(zomdb::InputError::Utf8)?;
     Ok(s.to_string())
 }
 
@@ -130,13 +137,13 @@ pub const ERR_VALUE_SIZE: i32 = 32;
 /// Indicates that data on disk is corrupted.
 pub const ERR_DATA: i32 = 50;
 
-fn to_errno(e: crate::Error) -> errno::Errno {
+fn to_errno(e: zomdb::Error) -> errno::Errno {
     let no = match e {
-        Error::IO(_) => ERR_IO,
-        Error::Input(InputError::Utf8(_)) => ERR_UTF8,
-        Error::Input(InputError::KeySize(_)) => ERR_KEY_SIZE,
-        Error::Input(InputError::ValueSize(_)) => ERR_VALUE_SIZE,
-        Error::Data(_) => ERR_DATA,
+        zomdb::Error::IO(_) => ERR_IO,
+        zomdb::Error::Input(zomdb::InputError::Utf8(_)) => ERR_UTF8,
+        zomdb::Error::Input(zomdb::InputError::KeySize(_)) => ERR_KEY_SIZE,
+        zomdb::Error::Input(zomdb::InputError::ValueSize(_)) => ERR_VALUE_SIZE,
+        zomdb::Error::Data(_) => ERR_DATA,
     };
 
     errno::Errno(no)
