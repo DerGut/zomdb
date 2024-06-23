@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/DerGut/zomdb/pkg/heap"
@@ -93,6 +94,28 @@ func TestNullByte(t *testing.T) {
 			t.Error("expected error")
 		}
 	})
+}
+
+func TestHeapAll(t *testing.T) {
+	h := newTestHeap(t)
+
+	values := [][]byte{[]byte("one"), []byte("two"), []byte("three")}
+
+	for i, value := range values {
+		key := []byte(strconv.Itoa(i))
+		h.Set(key, value)
+	}
+
+	i := len(values) - 1
+	for value := range h.All() {
+		if i < 0 {
+			t.Fatalf("got more values than expected")
+		}
+		if !bytes.Equal(value, values[i]) {
+			t.Errorf("expected %q, got %q", values[i], value)
+		}
+		i--
+	}
 }
 
 func FuzzHeapSet(f *testing.F) {
