@@ -37,7 +37,19 @@
  */
 #define ERR_DATA 50
 
+/**
+ * Heap is a primitive on-disk key-value structure.
+ *
+ * A Heap can be used to set and get key-value pairs, and to iterate over them.
+ */
 typedef struct Heap Heap;
+
+/**
+ * Can be used to iterate a Heap structure.
+ *
+ * Use heap_iter to create an instance of this struct from a Heap.
+ */
+typedef struct HeapIter HeapIter;
 
 struct Heap *create_heap(const char *file_name_cstr);
 
@@ -66,3 +78,9 @@ const char *heap_get(struct Heap *ptr, const char *key_cstr);
 void heap_set(struct Heap *ptr, const char *key_cstr, const char *value_cstr);
 
 void destroy_heap(struct Heap *ptr);
+
+struct HeapIter *heap_iter(struct Heap *ptr);
+
+const char *heap_iter_next(struct HeapIter *ptr);
+
+void heap_iter_destroy(struct HeapIter *ptr);
