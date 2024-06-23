@@ -118,11 +118,17 @@ pub struct HeapIter<'a> {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn heap_iter_next(ptr: *mut HeapIter) -> *const ffi::c_char {
+pub unsafe extern "C" fn heap_iter_next(ptr: *mut HeapIter) -> *const HeapTuple {
     let iter = unsafe { &mut *ptr };
 
     match iter.inner.next() {
-        Some(Ok(tuple)) => to_cstr(&tuple.value),
+        Some(Ok(tuple)) => {
+            let tuple = HeapTuple {
+                key: to_cstr(&tuple.key),
+                value: to_cstr(&tuple.value),
+            };
+            unsafe { transmute(Box::new(tuple)) }
+        }
         Some(Err(e)) => {
             println!("zomdb: heap_iter.next: {:?}", e);
             errno::set_errno(to_errno(e));
@@ -130,6 +136,13 @@ pub unsafe extern "C" fn heap_iter_next(ptr: *mut HeapIter) -> *const ffi::c_cha
         }
         None => std::ptr::null(),
     }
+}
+
+/// HeapTuple is a key-value pair from a Heap.
+#[repr(C)]
+pub struct HeapTuple {
+    key: *const ffi::c_char,
+    value: *const ffi::c_char,
 }
 
 #[no_mangle]

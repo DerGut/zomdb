@@ -95,7 +95,7 @@ impl Heap {
 
 #[derive(Debug, PartialEq)]
 pub struct HeapTuple {
-    key: Vec<u8>,
+    pub key: Vec<u8>,
     pub value: Vec<u8>,
 }
 
