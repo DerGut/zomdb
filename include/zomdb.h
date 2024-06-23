@@ -51,6 +51,14 @@ typedef struct Heap Heap;
  */
 typedef struct HeapIter HeapIter;
 
+/**
+ * HeapTuple is a key-value pair from a Heap.
+ */
+typedef struct HeapTuple {
+  const char *key;
+  const char *value;
+} HeapTuple;
+
 struct Heap *create_heap(const char *file_name_cstr);
 
 /**
@@ -81,6 +89,6 @@ void destroy_heap(struct Heap *ptr);
 
 struct HeapIter *heap_iter(struct Heap *ptr);
 
-const char *heap_iter_next(struct HeapIter *ptr);
+const struct HeapTuple *heap_iter_next(struct HeapIter *ptr);
 
 void heap_iter_destroy(struct HeapIter *ptr);
