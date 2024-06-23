@@ -86,24 +86,26 @@ func (h *Heap) Set(key, value []byte) error {
 // All returns an iterator over all values of the heap.
 //
 // Yielded values are ordered in reverse insertion order.
-func (h *Heap) All() iter.Seq[[]byte] {
-	return func(yield func(v []byte) bool) {
+func (h *Heap) All() iter.Seq2[[]byte, []byte] {
+	return func(yield func(k, v []byte) bool) {
 		iter := C.heap_iter(h.heap)
 		defer C.heap_iter_destroy(iter)
 
 		for {
-			value, errno := C.heap_iter_next(iter)
+			tuple, errno := C.heap_iter_next(iter)
 			if err := goErr(errno); err != nil {
 				panic(err)
 			}
 
-			if value == nil {
+			if tuple == nil {
+				// No more values.
 				return
 			}
 
-			goValue := []byte(C.GoString(value))
+			goKey := []byte(C.GoString(tuple.key))
+			goValue := []byte(C.GoString(tuple.value))
 
-			if !yield(goValue) {
+			if !yield(goKey, goValue) {
 				return
 			}
 		}

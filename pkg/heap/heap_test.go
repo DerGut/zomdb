@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"path/filepath"
-	"strconv"
 	"testing"
 
 	"github.com/DerGut/zomdb/pkg/heap"
@@ -99,22 +98,16 @@ func TestNullByte(t *testing.T) {
 func TestHeapAll(t *testing.T) {
 	h := newTestHeap(t)
 
-	values := [][]byte{[]byte("one"), []byte("two"), []byte("three")}
-
-	for i, value := range values {
-		key := []byte(strconv.Itoa(i))
-		h.Set(key, value)
+	values := map[string]string{"1": "one", "2": "two", "3": "three"}
+	for key, value := range values {
+		h.Set([]byte(key), []byte(value))
 	}
 
-	i := len(values) - 1
-	for value := range h.All() {
-		if i < 0 {
-			t.Fatalf("got more values than expected")
+	for key, value := range h.All() {
+		want := []byte(values[string(key)])
+		if !bytes.Equal(value, want) {
+			t.Errorf("expected %q, got %q", want, value)
 		}
-		if !bytes.Equal(value, values[i]) {
-			t.Errorf("expected %q, got %q", values[i], value)
-		}
-		i--
 	}
 }
 
