@@ -9,7 +9,7 @@ pub struct Heap {
     // Heap only delegates to the inner Heap.
     // This is because it isn't straightforward to generate FFI bindings
     // for external packages, so we redefine a Heap struct here instead.
-    inner: zomdb::Heap
+    inner: zomdb::Heap,
 }
 
 #[no_mangle]
@@ -26,7 +26,7 @@ pub unsafe extern "C" fn create_heap(file_name_cstr: *const ffi::c_char) -> *mut
     println!("zomdb: opening heap file: {}", file_name);
 
     let heap = match zomdb::Heap::from(file_name.into()) {
-        Ok(heap) => Heap{ inner: heap },
+        Ok(heap) => Heap { inner: heap },
         Err(e) => {
             println!("zomdb: Heap::from: {:?}", e);
             errno::set_errno(to_errno(e));

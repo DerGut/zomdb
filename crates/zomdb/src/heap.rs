@@ -1,7 +1,7 @@
-use std::{cmp, fs, io, path};
+use crate::{DeserializationError, Error, Index, InputError, MAX_KEY_SIZE, MAX_VALUE_SIZE};
 use std::collections::HashSet;
 use std::io::{Read, Seek, Write};
-use crate::{DeserializationError, Error, Index, InputError, MAX_KEY_SIZE, MAX_VALUE_SIZE};
+use std::{cmp, fs, io, path};
 
 pub struct Heap {
     file: fs::File,
@@ -12,7 +12,7 @@ impl Heap {
     const MAX_TUPLE_SIZE: usize = MAX_KEY_SIZE + MAX_VALUE_SIZE + 3;
 
     /// The minimum byte size of a tuple on disk.
-    const MIN_TUPLE_SIZE: usize = 1+3; // 1 byte key + 0 byte value
+    const MIN_TUPLE_SIZE: usize = 1 + 3; // 1 byte key + 0 byte value
 
     fn new(file: fs::File) -> Self {
         Self { file }
@@ -55,7 +55,7 @@ impl Heap {
             return Err(DeserializationError::DataTooShort);
         }
 
-        let key_size = (data[data.len() - 1] as usize)+1;
+        let key_size = (data[data.len() - 1] as usize) + 1;
         if key_size > MAX_KEY_SIZE {
             return Err(DeserializationError::KeySizeTooBig);
         }
@@ -101,9 +101,9 @@ pub struct HeapTuple {
 
 impl HeapTuple {
     fn from(key: &[u8], value: &[u8]) -> Self {
-        assert!(key.len()<=MAX_KEY_SIZE);
+        assert!(key.len() <= MAX_KEY_SIZE);
         assert!(!key.is_empty());
-        assert!(value.len()<=MAX_VALUE_SIZE);
+        assert!(value.len() <= MAX_VALUE_SIZE);
         HeapTuple {
             key: key.to_vec(),
             value: value.to_vec(),
@@ -147,7 +147,6 @@ impl<'a> Iterator for Iter<'a> {
 }
 
 impl<'a> Iter<'a> {
-
     const DEFAULT_CHUNK_SIZE: usize = Heap::MAX_TUPLE_SIZE;
 
     fn next_iter(&mut self) -> Result<Option<HeapTuple>, Error> {
@@ -156,7 +155,6 @@ impl<'a> Iter<'a> {
             self.file_offset = self.file_size;
             self.initialized = true;
         }
-
 
         while self.file_bytes_remaining() > 0 {
             self.seek()?; // This call could be avoided if this run is reentrant
@@ -169,20 +167,19 @@ impl<'a> Iter<'a> {
                 // Read next tuple from the chunk buffer.
 
                 let bytes = &self.chunk_buffer[..self.buffer_bytes_remaining()];
-                let tuple =
-                    match Heap::deserialize(bytes) {
-                        Ok(tuple) => tuple,
-                        Err(DeserializationError::DataTooShort) => {
-                            // We've exhausted the buffer and need to read a new chunk from the file
-                            // before completely deserializing this tuple. We move the remaining
-                            // bytes to an overflow buffer to append them on the next chunk read.
-                            self.overflow = Vec::from(bytes);
-                            self.buffer_offset += self.overflow.len(); // Skip to the next chunk
+                let tuple = match Heap::deserialize(bytes) {
+                    Ok(tuple) => tuple,
+                    Err(DeserializationError::DataTooShort) => {
+                        // We've exhausted the buffer and need to read a new chunk from the file
+                        // before completely deserializing this tuple. We move the remaining
+                        // bytes to an overflow buffer to append them on the next chunk read.
+                        self.overflow = Vec::from(bytes);
+                        self.buffer_offset += self.overflow.len(); // Skip to the next chunk
 
-                            continue
-                        }
-                        Err(e) => return Err(Error::Data(e)),
-                    };
+                        continue;
+                    }
+                    Err(e) => return Err(Error::Data(e)),
+                };
 
                 self.buffer_offset += tuple.disk_len();
 
@@ -205,7 +202,10 @@ impl<'a> Iter<'a> {
         // In between calls to iter, new tuples may be appended to the file
         // which changes its size. Because the file is append-only, seeking
         // to offsets starting at the beginning should be safe.
-        self.file.seek(io::SeekFrom::Start(self.file_offset)).map_err(Error::IO).map(|_| ())
+        self.file
+            .seek(io::SeekFrom::Start(self.file_offset))
+            .map_err(Error::IO)
+            .map(|_| ())
     }
 
     fn file_bytes_remaining(&self) -> usize {
@@ -426,7 +426,10 @@ mod test {
         let key_size = MAX_KEY_SIZE;
         let value_size = test_tuple_size - key_size;
 
-        assert!(test_tuple_size <= Heap::MAX_TUPLE_SIZE, "test_tuple_size too large");
+        assert!(
+            test_tuple_size <= Heap::MAX_TUPLE_SIZE,
+            "test_tuple_size too large"
+        );
         assert!(value_size <= MAX_VALUE_SIZE, "value_size too large");
 
         let key1 = vec![1u8; key_size];
@@ -441,8 +444,11 @@ mod test {
         let tuple2 = iter.next().unwrap().unwrap();
         let tuple1 = iter.next().unwrap().unwrap();
 
-        assert_eq!(tuple2, HeapTuple::from(&key2, &value2), "latest tuple has unexpected value");
+        assert_eq!(
+            tuple2,
+            HeapTuple::from(&key2, &value2),
+            "latest tuple has unexpected value"
+        );
         assert_eq!(tuple1, HeapTuple::from(&key1, &value1));
     }
 }
-
