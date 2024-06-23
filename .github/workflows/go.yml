@@ -36,6 +36,10 @@ jobs:
 
     - name: Build
       run: go build -v ./...
+      env:
+        GOEXPERIMENT: rangefunc
 
     - name: Test
       run: go test -v ./...
+      env:
+        GOEXPERIMENT: rangefunc

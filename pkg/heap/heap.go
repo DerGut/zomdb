@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"iter"
 	"syscall"
 	"unsafe"
 )
@@ -80,6 +81,35 @@ func (h *Heap) Set(key, value []byte) error {
 	}
 
 	return nil
+}
+
+// All returns an iterator over all values of the heap.
+//
+// Yielded values are ordered in reverse insertion order.
+func (h *Heap) All() iter.Seq2[[]byte, []byte] {
+	return func(yield func(k, v []byte) bool) {
+		iter := C.heap_iter(h.heap)
+		defer C.heap_iter_destroy(iter)
+
+		for {
+			tuple, errno := C.heap_iter_next(iter)
+			if err := goErr(errno); err != nil {
+				panic(err)
+			}
+
+			if tuple == nil {
+				// No more values.
+				return
+			}
+
+			goKey := []byte(C.GoString(tuple.key))
+			goValue := []byte(C.GoString(tuple.value))
+
+			if !yield(goKey, goValue) {
+				return
+			}
+		}
+	}
 }
 
 func goErr(err error) error {

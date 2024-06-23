@@ -2,6 +2,9 @@
 use std::{ffi, mem::transmute};
 use zomdb::Index;
 
+/// Heap is a primitive on-disk key-value structure.
+///
+/// A Heap can be used to set and get key-value pairs, and to iterate over them.
 pub struct Heap {
     // Heap only delegates to the inner Heap.
     // This is because it isn't straightforward to generate FFI bindings
@@ -97,6 +100,55 @@ pub unsafe extern "C" fn heap_set(
 pub unsafe extern "C" fn destroy_heap(ptr: *mut Heap) {
     let heap = unsafe { Box::from_raw(ptr) };
     drop(heap);
+}
+
+#[no_mangle]
+pub extern "C" fn heap_iter(ptr: *mut Heap) -> *mut HeapIter<'static> {
+    let heap = unsafe { &mut *ptr };
+    let iter = heap.inner.iter();
+
+    unsafe { transmute(Box::new(HeapIter { inner: iter })) }
+}
+
+/// Can be used to iterate a Heap structure.
+///
+/// Use heap_iter to create an instance of this struct from a Heap.
+pub struct HeapIter<'a> {
+    inner: zomdb::Iter<'a>,
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn heap_iter_next(ptr: *mut HeapIter) -> *const HeapTuple {
+    let iter = unsafe { &mut *ptr };
+
+    match iter.inner.next() {
+        Some(Ok(tuple)) => {
+            let tuple = HeapTuple {
+                key: to_cstr(&tuple.key),
+                value: to_cstr(&tuple.value),
+            };
+            unsafe { transmute(Box::new(tuple)) }
+        }
+        Some(Err(e)) => {
+            println!("zomdb: heap_iter.next: {:?}", e);
+            errno::set_errno(to_errno(e));
+            std::ptr::null()
+        }
+        None => std::ptr::null(),
+    }
+}
+
+/// HeapTuple is a key-value pair from a Heap.
+#[repr(C)]
+pub struct HeapTuple {
+    key: *const ffi::c_char,
+    value: *const ffi::c_char,
+}
+
+#[no_mangle]
+pub extern "C" fn heap_iter_destroy(ptr: *mut HeapIter) {
+    let iter = unsafe { Box::from_raw(ptr) };
+    drop(iter);
 }
 
 unsafe fn string_from_cstr(s: *const ffi::c_char) -> Result<String, zomdb::InputError> {

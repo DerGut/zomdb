@@ -76,7 +76,7 @@ impl Heap {
     }
 
     /// Returns an Iter that starts iterating from the last inserted tuple.
-    fn iter(&self) -> Iter<'_> {
+    pub fn iter(&self) -> Iter<'_> {
         Iter {
             file: &self.file,
             initialized: false,
@@ -95,8 +95,8 @@ impl Heap {
 
 #[derive(Debug, PartialEq)]
 pub struct HeapTuple {
-    key: Vec<u8>,
-    value: Vec<u8>,
+    pub key: Vec<u8>,
+    pub value: Vec<u8>,
 }
 
 impl HeapTuple {

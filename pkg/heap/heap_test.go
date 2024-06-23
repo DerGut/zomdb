@@ -95,6 +95,22 @@ func TestNullByte(t *testing.T) {
 	})
 }
 
+func TestHeapAll(t *testing.T) {
+	h := newTestHeap(t)
+
+	values := map[string]string{"1": "one", "2": "two", "3": "three"}
+	for key, value := range values {
+		h.Set([]byte(key), []byte(value))
+	}
+
+	for key, value := range h.All() {
+		want := []byte(values[string(key)])
+		if !bytes.Equal(value, want) {
+			t.Errorf("expected %q, got %q", want, value)
+		}
+	}
+}
+
 func FuzzHeapSet(f *testing.F) {
 	h := newTestHeap(f)
 

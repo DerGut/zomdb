@@ -6,7 +6,7 @@ use std::{
 
 mod heap;
 
-pub use heap::Heap;
+pub use heap::{Heap, HeapTuple, Iter};
 
 /// The maximum byte size of keys.
 const MAX_KEY_SIZE: usize = 256;
