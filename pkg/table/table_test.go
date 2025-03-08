@@ -1,286 +1,63 @@
-package table
+package table_test
 
 import (
-	"bytes"
-	"errors"
+	"path/filepath"
 	"testing"
 
-	"github.com/spf13/afero"
+	"github.com/DerGut/zomdb/pkg/table"
 )
 
-func TestTable(t *testing.T) {
-	var (
-		put = "put"
-		get = "get"
-	)
-	tc := []struct {
-		name string
-		ops  []struct {
-			op  string
-			row Row
-			err error
-		}
-	}{
-		{
-			name: "write -> read",
-			ops: []struct {
-				op  string
-				row Row
-				err error
-			}{
-				{
-					op: put,
-					row: Row{
-						PrimaryKey: []byte("key1"),
-						Data:       []byte("hallo"),
-					},
-				},
-				{
-					op: get,
-					row: Row{
-						PrimaryKey: []byte("key1"),
-						Data:       []byte("hallo"),
-					},
-				},
-			},
-		},
-		{
-			name: "write1 -> write2 -> write3 -> read2 -> read1",
-			ops: []struct {
-				op  string
-				row Row
-				err error
-			}{
-				{
-					op: put,
-					row: Row{
-						PrimaryKey: []byte("key1"),
-						Data:       []byte("test1"),
-					},
-				},
-				{
-					op: put,
-					row: Row{
-						PrimaryKey: []byte("key2"),
-						Data:       []byte("test2"),
-					},
-				},
-				{
-					op: put,
-					row: Row{
-						PrimaryKey: []byte("key3"),
-						Data:       []byte("test3"),
-					},
-				},
-				{
-					op: get,
-					row: Row{
-						PrimaryKey: []byte("key2"),
-						Data:       []byte("test2"),
-					},
-				},
-				{
-					op: get,
-					row: Row{
-						PrimaryKey: []byte("key1"),
-						Data:       []byte("test1"),
-					},
-				},
-			},
-		},
-		{
-			name: "put k1 v1 -> put k1 v2 -> get k1",
-			ops: []struct {
-				op  string
-				row Row
-				err error
-			}{
-				{
-					op: put,
-					row: Row{
-						PrimaryKey: []byte("key1"),
-						Data:       []byte("hallo"),
-					},
-				},
-				{
-					op: put,
-					row: Row{
-						PrimaryKey: []byte("key1"),
-						Data:       []byte("overwritten"),
-					},
-				},
-				{
-					op: get,
-					row: Row{
-						PrimaryKey: []byte("key1"),
-						Data:       []byte("overwritten"),
-					},
-				},
-			},
-		},
-		{
-			name: "get k1 -> not found",
-			ops: []struct {
-				op  string
-				row Row
-				err error
-			}{
-				{
-					op:  get,
-					row: Row{PrimaryKey: []byte("not exist")},
-					err: ErrNotFound,
-				},
-			},
-		},
-		{
-			name: "keySize > buffer",
-			ops: []struct {
-				op  string
-				row Row
-				err error
-			}{
-				{
-					op: put,
-					row: Row{
-						PrimaryKey: make([]byte, 3000),
-						Data:       []byte("hallo"),
-					},
-				},
-				{
-					op: get,
-					row: Row{
-						PrimaryKey: make([]byte, 3000),
-						Data:       []byte("hallo"),
-					},
-				},
-			},
-		},
-		{
-			name: "valSize > buffer",
-			ops: []struct {
-				op  string
-				row Row
-				err error
-			}{
-				{
-					op: put,
-					row: Row{
-						PrimaryKey: []byte("key"),
-						Data:       make([]byte, 3000),
-					},
-				},
-				{
-					op: get,
-					row: Row{
-						PrimaryKey: []byte("key"),
-						Data:       make([]byte, 3000),
-					},
-				},
-			},
-		},
-		{
-			name: "key > maxSize",
-			ops: []struct {
-				op  string
-				row Row
-				err error
-			}{
-				{
-					op: put,
-					row: Row{
-						PrimaryKey: make([]byte, MaxPrimaryKeySize+1),
-						Data:       []byte("hallo"),
-					},
-					err: ErrInvalidKey,
-				},
-			},
+func TestTable_New(t *testing.T) {
+	spec := table.Spec{
+		Name: filepath.Join(t.TempDir(), "test"),
+		Columns: []table.Column{
+			{Name: "id", Type: table.ColumnTypeString, PrimaryKey: true},
+			{Name: "name", Type: table.ColumnTypeString},
+			{Name: "amount", Type: table.ColumnTypeInt64},
 		},
 	}
 
-	for _, tt := range tc {
-		t.Run(tt.name, func(t *testing.T) {
-			tbl, err := New(afero.NewMemMapFs())
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			for _, op := range tt.ops {
-				switch op.op {
-				case "put":
-					err := tbl.Put(&op.row)
-					if !errors.Is(err, op.err) {
-						t.Fatalf("Expected err \"%v\", got \"%v\"\n", op.err, err)
-					}
-				case "get":
-					row, err := tbl.Get(op.row.PrimaryKey)
-					if !errors.Is(err, op.err) {
-						t.Fatalf("Expected err \"%v\", got \"%v\"\n", op.err, err)
-					}
-					if row != nil && !bytes.Equal(op.row.Data, row.Data) {
-						t.Fatalf("Expected \"%s\" got \"%s\"\n", op.row.Data, row.Data)
-					}
-				default:
-					t.Fatalf("Unknown op: %s\n", op.op)
-				}
-			}
-		})
-	}
-}
-
-func FuzzTable(f *testing.F) {
-	tbl, err := New(afero.NewMemMapFs())
+	tbl, err := table.New(spec)
 	if err != nil {
-		f.Fatal(err)
+		t.Fatal("new table", err)
 	}
 
-	f.Fuzz(func(t *testing.T, key, data []byte) {
-		row := Row{
-			PrimaryKey: key,
-			Data:       data,
+	for i, row := range [][]any{
+		{"id1", "foo", 3},
+		{"id2", "bar", 16},
+		{"id3", "baz", 39},
+	} {
+		if err := tbl.Insert(row); err != nil {
+			t.Fatalf("insert row %d: %v\n", i, err)
 		}
+	}
 
-		if err := tbl.Put(&row); err != nil {
-			if errors.Is(err, ErrInvalidKey) {
-				t.SkipNow()
-			}
-
-			if errors.Is(err, ErrInvalidData) {
-				t.SkipNow()
-			}
-
-			t.Fatal(err)
-		}
-
-		result, err := tbl.Get(key)
-		if err != nil {
-			if errors.Is(err, ErrInvalidKey) {
-				t.SkipNow()
-			}
-
-			t.Fatal(err)
-		}
-
-		if (err == nil) == (result == nil) {
-			t.Fail()
-		}
-
-		if len(data) != len(result.Data) {
-			t.Fail()
-		}
-
-		for i := range data {
-			if data[i] != result.Data[i] {
-				t.Fatalf("data[%d] == %v != %v == result.Data[%d]\n", i, data[i], result.Data[i], i)
-			}
-		}
-
-		if !bytes.Equal(data, result.Data) {
-			t.Logf("len(expected): %d, len(got): %d\n", len(data), len(result.Data))
-			t.Fatalf("Expected \"%v\" got \"%v\"\n", data, result.Data)
-		}
-
-		if !bytes.Equal(key, result.PrimaryKey) {
-			t.Fatalf("Expected \"%v\" got \"%v\"\n", key, result.PrimaryKey)
-		}
+	row, err := tbl.Select([]table.Predicate{
+		{ColumnName: "id", Value: "id2"},
 	})
+	if err != nil {
+		t.Fatalf("Select row: %v\n", err)
+	}
+
+	if len(row) != 3 {
+		t.Fatalf("Expected 3 column values, got %d", len(row))
+	}
+
+	id, ok := row[0].(string)
+	if !ok {
+		t.Fatalf("Expected string type, got %T", row[0])
+	}
+
+	if id != "id2" {
+		t.Fatalf("Expected %q, got %q", "id2", id)
+	}
+
+	name, ok := row[1].(string)
+	if !ok {
+		t.Fatalf("Expected string type, got %T", row[1])
+	}
+
+	if name != "bar" {
+		t.Fatalf("Expected %q, got %q", "bar", name)
+	}
 }

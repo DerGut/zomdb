@@ -2,201 +2,210 @@ package table
 
 import (
 	"bytes"
-	"encoding"
-	"encoding/binary"
+	"encoding/gob"
 	"errors"
 	"fmt"
-	"io"
-	"math"
 
-	"github.com/DerGut/zomdb/pkg/log"
-	"github.com/spf13/afero"
-)
-
-var (
-	MaxPrimaryKeySize = math.MaxUint32
-	MaxDataSize       = math.MaxUint32
-)
-
-var (
-	ErrNotFound    = errors.New("not found")
-	ErrCorruptData = errors.New("data is corruped")
-
-	ErrInvalidKey  = errors.New("invalid key")
-	ErrInvalidData = errors.New("invalid data")
+	"github.com/DerGut/zomdb/pkg/heap"
 )
 
 type Table struct {
-	log *log.Log
+	heap *heap.Heap
+
+	columns []Column
+	pkIdxs  []int
 }
 
-func New(fs afero.Fs) (*Table, error) {
-	l, err := log.New(fs)
+func New(spec Spec) (*Table, error) {
+	var primaryKeys []int
+	for i, col := range spec.Columns {
+		if col.PrimaryKey {
+			primaryKeys = append(primaryKeys, i)
+		}
+	}
+
+	if len(primaryKeys) == 0 {
+		return nil, errors.New("no primary key defined")
+	}
+
+	h, err := heap.New(spec.Name)
 	if err != nil {
-		return nil, fmt.Errorf("new log: %w", err)
+		return nil, fmt.Errorf("new heap: %w", err)
 	}
 
 	return &Table{
-		log: l,
+		heap:    h,
+		columns: spec.Columns,
+		pkIdxs:  primaryKeys,
 	}, nil
 }
 
-func (t *Table) Put(row *Row) error {
-	data, err := row.MarshalBinary()
+type Spec struct {
+	Name    string
+	Columns []Column
+}
+
+type Column struct {
+	Name       string
+	Type       ColumnType
+	PrimaryKey bool
+}
+
+func (c Column) String() string {
+	return c.Name
+}
+
+type ColumnType int
+
+const (
+	ColumnTypeString ColumnType = iota
+	ColumnTypeInt64
+)
+
+func (t *Table) Insert(values []any) error {
+	if len(values) != len(t.columns) {
+		// We don't yet support nullable values.
+		return fmt.Errorf("must pass no. of values equal to no. of columns, passed: %d", len(values))
+	}
+
+	for i := range values {
+		if err := validateColumnType(values[i], t.columns[i].Type); err != nil {
+			return fmt.Errorf("column %s: %w", t.columns[i], err)
+		}
+	}
+
+	key, err := t.buildKey(values)
 	if err != nil {
-		return fmt.Errorf("encode row: %w", err)
+		return fmt.Errorf("build key: %w", err)
 	}
 
-	if _, err := t.log.Append(data); err != nil {
-		return fmt.Errorf("append to log: %w", err)
+	value, err := encode(values)
+	if err != nil {
+		return fmt.Errorf("build value: %w", err)
 	}
 
-	return nil
+	return t.heap.Set(key, value)
 }
 
-func (t *Table) Get(primaryKey []byte) (*Row, error) {
-	const bufSize = 1024
-
-	if err := validateKey(primaryKey); err != nil {
-		return nil, fmt.Errorf("validate key: %w", err)
-	}
-
-	buf := make([]byte, bufSize)
-
-	var match *Row
-	var off int64
-
-	// Run a sequential scan
-	for {
-		n, err := t.log.ReadAt(buf, off)
+// Select retrieves a single row from the table.
+//
+// TODO: Don't assume predicates are ANDed.
+func (t *Table) Select(where []Predicate) ([]any, error) {
+	if pks, ok := t.primaryKeysFromPredicates(where); ok {
+		row, err := t.indexScan(pks)
 		if err != nil {
-			// We try to read a fixed-size buffer, so an EOF can
-			// occur even though all the data we want has been read
-			// successfully
-			if errors.Is(err, io.EOF) && n == 0 {
-				// If it occurs right away, we hit the end of the log
-				break
+			return nil, fmt.Errorf("index scan: %w", err)
+		}
+
+		return row, nil
+	}
+
+	row, err := t.sequentialScan(where)
+	if err != nil {
+		return nil, fmt.Errorf("sequential scan: %w", err)
+	}
+
+	return row, nil
+}
+
+func (t *Table) primaryKeysFromPredicates(predicates []Predicate) ([]any, bool) {
+	pks := make([]any, 0, len(t.pkIdxs))
+	for _, idx := range t.pkIdxs {
+		for _, predicate := range predicates {
+			if t.columns[idx].Name == predicate.ColumnName {
+				pks = append(pks, predicate.Value)
 			}
-
-			return nil, fmt.Errorf("read at %d: %w", off, err)
 		}
-
-		// At minimum, we encode two uint32 size values for each key-value pair
-		if n < 8 {
-			return nil, fmt.Errorf("row doesn't fit sizes: %d: %w", off, ErrCorruptData)
-		}
-
-		keySize := binary.BigEndian.Uint32(buf[:4])
-		valSize := binary.BigEndian.Uint32(buf[4:8])
-
-		if int(keySize) != len(primaryKey) {
-			// If the key size doesn't match, we already know that this
-			// isn't the right value
-			off += 8 + int64(keySize) + int64(valSize)
-			continue
-		}
-
-		// If row didn't fit into the buffer
-		// TODO: track this to optimize default buffer size
-		rowSize := 8 + keySize + valSize
-		if rowSize > bufSize {
-			missingBufSize := rowSize - bufSize
-			extdBuf := make([]byte, missingBufSize)
-
-			// Start at current offset + len of first buffer
-			newOff := off + bufSize
-			if _, err := t.log.ReadAt(extdBuf, newOff); err != nil {
-				if errors.Is(err, io.EOF) {
-					// This time we know that the key+value should fit
-					return nil, ErrCorruptData
-				}
-
-				return nil, fmt.Errorf("read extended buffer: %w", err)
-			}
-
-			buf = append(buf, extdBuf...)
-		}
-
-		foundKey := buf[8 : 8+keySize]
-
-		if !bytes.Equal(primaryKey, foundKey) {
-			// Key mismatch
-			off += 8 + int64(keySize) + int64(valSize)
-			continue
-		}
-
-		// Save the match but continue through the rest of the log (most recent wins)
-		row := Row{
-			PrimaryKey: make([]byte, len(primaryKey)),
-			Data:       make([]byte, valSize),
-		}
-		copy(row.PrimaryKey, primaryKey)
-		copy(row.Data, buf[8+keySize:8+keySize+valSize])
-
-		off += int64(rowSize)
-		match = &row
 	}
 
-	if match == nil {
-		return nil, ErrNotFound
+	if len(pks) != len(t.pkIdxs) {
+		// We don't have predicates for all primary keys.
+		return nil, false
 	}
 
-	return match, nil
+	return pks, true
 }
 
-type Row struct {
-	PrimaryKey []byte
-	Data       []byte
+func (t *Table) indexScan(pks []any) ([]any, error) {
+	key, err := encode(pks)
+	if err != nil {
+		return nil, fmt.Errorf("encode: %w", err)
+	}
+
+	b, err := t.heap.Get(key)
+	if err != nil {
+		return nil, fmt.Errorf("get: %w", err)
+	}
+
+	row, err := decode(b)
+	if err != nil {
+		return nil, err
+	}
+
+	return row, nil
 }
 
-var _ encoding.BinaryMarshaler = &Row{}
-
-func (r *Row) MarshalBinary() ([]byte, error) {
-	if err := ValidateRow(r); err != nil {
-		return nil, fmt.Errorf("validate: %w", err)
+func (t *Table) sequentialScan(where []Predicate) ([]any, error) {
+	for key, value := range t.heap.All() {
+		_, _ = key, value
 	}
-
-	keySize := len(r.PrimaryKey)
-	valSize := len(r.Data)
-
-	data := make([]byte, keySize+valSize+8)
-
-	// Encode row
-	binary.BigEndian.PutUint32(data[:4], uint32(keySize))
-	binary.BigEndian.PutUint32(data[4:8], uint32(valSize))
-	copy(data[8:8+keySize], r.PrimaryKey)
-	copy(data[8+keySize:], r.Data)
-
-	return data, nil
+	return nil, errors.New("not implemented")
 }
 
-func ValidateRow(row *Row) error {
-	if row == nil {
-		return errors.New("nil row")
-	}
-
-	if err := validateKey(row.PrimaryKey); err != nil {
-		return err
-	}
-
-	if len(row.Data) == 0 {
-		return ErrInvalidData
-	}
-
-	if len(row.Data) > MaxDataSize {
-		return fmt.Errorf("len(data) > MaxDataSize: %w", ErrInvalidData)
-	}
-
-	return nil
+// Predicate matches which row's column value equals the given value.
+//
+// TODO: Support more operators to be able to return multiple results from
+// select.
+type Predicate struct {
+	ColumnName string
+	Value      any
 }
 
-func validateKey(key []byte) error {
-	if len(key) == 0 {
-		return ErrInvalidKey
+func (t *Table) buildKey(values []any) ([]byte, error) {
+	key := make([]any, len(t.pkIdxs))
+	for i, idx := range t.pkIdxs {
+		key[i] = values[idx]
 	}
 
-	if len(key) > MaxPrimaryKeySize {
-		return fmt.Errorf("key too large: %w", ErrInvalidKey)
+	return encode(key)
+}
+
+func encode(a []any) ([]byte, error) {
+	var buf bytes.Buffer
+	if err := gob.NewEncoder(&buf).Encode(a); err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+}
+
+func decode(p []byte) ([]any, error) {
+	r := bytes.NewReader(p)
+
+	var v []any
+	if err := gob.NewDecoder(r).Decode(&v); err != nil {
+		return nil, err
+	}
+
+	return v, nil
+}
+
+func validateColumnType(value any, colType ColumnType) error {
+	switch colType {
+	case ColumnTypeString:
+		if _, ok := value.(string); !ok {
+			return fmt.Errorf("expected string value, received %T", value)
+		}
+	case ColumnTypeInt64:
+		switch value.(type) {
+		case int64, int:
+			return nil
+		default:
+			return fmt.Errorf("expected int64 value, received %T", value)
+		}
+
+	default:
+		return fmt.Errorf("unsupported type %T", value)
 	}
 
 	return nil
