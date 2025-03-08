@@ -7,7 +7,7 @@ import (
 	"github.com/DerGut/zomdb/pkg/table"
 )
 
-func TestTable_New(t *testing.T) {
+func TestTable(t *testing.T) {
 	spec := table.Spec{
 		Name: filepath.Join(t.TempDir(), "test"),
 		Columns: []table.Column{
@@ -59,5 +59,14 @@ func TestTable_New(t *testing.T) {
 
 	if name != "bar" {
 		t.Fatalf("Expected %q, got %q", "bar", name)
+	}
+
+	amount, ok := row[2].(uint64)
+	if !ok {
+		t.Fatalf("Expected int type, got %T", row[2])
+	}
+
+	if amount != 16 {
+		t.Fatalf("Expected %d, got %d", 16, amount)
 	}
 }

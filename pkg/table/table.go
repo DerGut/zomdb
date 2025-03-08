@@ -1,12 +1,11 @@
 package table
 
 import (
-	"bytes"
-	"encoding/gob"
 	"errors"
 	"fmt"
 
 	"github.com/DerGut/zomdb/pkg/heap"
+	"github.com/fxamacker/cbor/v2"
 )
 
 type Table struct {
@@ -171,23 +170,16 @@ func (t *Table) buildKey(values []any) ([]byte, error) {
 }
 
 func encode(a []any) ([]byte, error) {
-	var buf bytes.Buffer
-	if err := gob.NewEncoder(&buf).Encode(a); err != nil {
-		return nil, err
-	}
-
-	return buf.Bytes(), nil
+	return cbor.Marshal(a)
 }
 
 func decode(p []byte) ([]any, error) {
-	r := bytes.NewReader(p)
-
-	var v []any
-	if err := gob.NewDecoder(r).Decode(&v); err != nil {
+	var values []any
+	if err := cbor.Unmarshal(p, &values); err != nil {
 		return nil, err
 	}
 
-	return v, nil
+	return values, nil
 }
 
 func validateColumnType(value any, colType ColumnType) error {
