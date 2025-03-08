@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use std::io::{Read, Seek, Write};
 use std::{cmp, fs, io, path};
 
+/// An on-disk heap data structure.
 pub struct Heap {
     file: fs::File,
 }
@@ -18,6 +19,11 @@ impl Heap {
         Self { file }
     }
 
+    /// Creates a new Heap from the provided path.
+    ///
+    /// If the path points to an existing Heap, it will be opened and reused.
+    /// If it points to a new location, a new file is going to be created to
+    /// back the Heap.
     pub fn from(path: path::PathBuf) -> Result<Self, Error> {
         let file = fs::OpenOptions::new()
             .read(true)
@@ -27,52 +33,6 @@ impl Heap {
             .open(path)
             .map_err(Error::IO)?;
         Ok(Self::new(file))
-    }
-
-    fn serialize(key: &[u8], value: &[u8]) -> Vec<u8> {
-        assert!(key.len() <= MAX_KEY_SIZE);
-        assert!(value.len() <= MAX_VALUE_SIZE);
-        // 8bit for key size
-        // 16bit for value size
-        let mut data = Vec::with_capacity(key.len() + value.len() + 1 + 2);
-        data.extend_from_slice(value);
-        data.extend_from_slice(key);
-        data.push((value.len() >> 8) as u8);
-        data.push(value.len() as u8);
-
-        // We use a single byte to encode the key size which allows to store
-        // the value 255 as a maximum. We also require keys to be of at least
-        // one byte in size. This means, that we don't need the 0 value and
-        // can shift the encoded number by 1 to allow for key sizes of 256 bytes.
-        let key_len = key.len() - 1;
-        data.push(key_len as u8);
-
-        data
-    }
-
-    fn deserialize(data: &[u8]) -> Result<HeapTuple, DeserializationError> {
-        if data.len() < Self::MIN_TUPLE_SIZE {
-            return Err(DeserializationError::DataTooShort);
-        }
-
-        let key_size = (data[data.len() - 1] as usize) + 1;
-        if key_size > MAX_KEY_SIZE {
-            return Err(DeserializationError::KeySizeTooBig);
-        }
-
-        let value_size = ((data[data.len() - 3] as usize) << 8) | data[data.len() - 2] as usize;
-        if value_size > MAX_VALUE_SIZE {
-            return Err(DeserializationError::ValueSizeTooBig);
-        }
-
-        if data.len() < key_size + value_size + 3 {
-            return Err(DeserializationError::DataTooShort);
-        }
-
-        let key = &data[data.len() - 3 - key_size..data.len() - 3];
-        let value = &data[data.len() - 3 - key_size - value_size..data.len() - 3 - key_size];
-
-        Ok(HeapTuple::from(key, value))
     }
 
     /// Returns an Iter that starts iterating from the last inserted tuple.
@@ -93,6 +53,7 @@ impl Heap {
     }
 }
 
+/// On-disk representation of key-value pairs.
 #[derive(Debug, PartialEq)]
 pub struct HeapTuple {
     pub key: Vec<u8>,
@@ -100,6 +61,7 @@ pub struct HeapTuple {
 }
 
 impl HeapTuple {
+    /// Creates a new HeapTuple from a known key-value pair.
     fn from(key: &[u8], value: &[u8]) -> Self {
         assert!(key.len() <= MAX_KEY_SIZE);
         assert!(!key.is_empty());
@@ -112,6 +74,53 @@ impl HeapTuple {
 
     fn disk_len(&self) -> usize {
         self.key.len() + self.value.len() + 3
+    }
+
+    fn serialize(&self) -> Vec<u8> {
+        assert!(self.key.len() <= MAX_KEY_SIZE);
+        assert!(self.value.len() <= MAX_VALUE_SIZE);
+        // 8bit for key size
+        // 16bit for value size
+        let mut data = Vec::with_capacity(self.key.len() + self.value.len() + 1 + 2);
+        data.extend_from_slice(&self.value);
+        data.extend_from_slice(&self.key);
+        data.push((self.value.len() >> 8) as u8);
+        data.push(self.value.len() as u8);
+
+        // We use a single byte to encode the key size which allows to store
+        // the value 255 as a maximum. We also require keys to be of at least
+        // one byte in size. This means, that we don't need the 0 value and
+        // can shift the encoded number by 1 to allow for key sizes of 256 bytes.
+        let key_len = self.key.len() - 1;
+        data.push(key_len as u8);
+
+        data
+    }
+
+    // Parses the key and value from a series of bytes.
+    fn deserialize(data: &[u8]) -> Result<Self, DeserializationError> {
+        if data.len() < Heap::MIN_TUPLE_SIZE {
+            return Err(DeserializationError::DataTooShort);
+        }
+
+        let key_size = (data[data.len() - 1] as usize) + 1;
+        if key_size > MAX_KEY_SIZE {
+            return Err(DeserializationError::KeySizeTooBig);
+        }
+
+        let value_size = ((data[data.len() - 3] as usize) << 8) | data[data.len() - 2] as usize;
+        if value_size > MAX_VALUE_SIZE {
+            return Err(DeserializationError::ValueSizeTooBig);
+        }
+
+        if data.len() < key_size + value_size + 3 {
+            return Err(DeserializationError::DataTooShort);
+        }
+
+        let key = &data[data.len() - 3 - key_size..data.len() - 3];
+        let value = &data[data.len() - 3 - key_size - value_size..data.len() - 3 - key_size];
+
+        Ok(Self::from(key, value))
     }
 }
 
@@ -167,7 +176,7 @@ impl<'a> Iter<'a> {
                 // Read next tuple from the chunk buffer.
 
                 let bytes = &self.chunk_buffer[..self.buffer_bytes_remaining()];
-                let tuple = match Heap::deserialize(bytes) {
+                let tuple = match HeapTuple::deserialize(bytes) {
                     Ok(tuple) => tuple,
                     Err(DeserializationError::DataTooShort) => {
                         // We've exhausted the buffer and need to read a new chunk from the file
@@ -247,7 +256,7 @@ impl Index for Heap {
             return Err(Error::Input(InputError::ValueSize(value.len())));
         }
 
-        let bytes = Self::serialize(key, value);
+        let bytes = HeapTuple::from(key, value).serialize();
 
         self.file.write_all(bytes.as_slice()).map_err(Error::IO)
     }
@@ -280,7 +289,7 @@ mod test {
 
     #[test]
     fn test_heap_serialize() {
-        let serialized = Heap::serialize(b"key", b"value");
+        let serialized = HeapTuple::from(b"key", b"value").serialize();
         assert_eq!(
             serialized,
             vec![b'v', b'a', b'l', b'u', b'e', b'k', b'e', b'y', 0, 5, 2]
@@ -290,7 +299,7 @@ mod test {
     #[test]
     fn test_heap_deserialize() {
         let serialized = vec![b'v', b'a', b'l', b'u', b'e', b'k', b'e', b'y', 0, 5, 2];
-        let deserialized = Heap::deserialize(&serialized).unwrap();
+        let deserialized = HeapTuple::deserialize(&serialized).unwrap();
         assert_eq!(deserialized, HeapTuple::from(b"key", b"value"));
     }
 
@@ -299,8 +308,8 @@ mod test {
         let key = b"key";
         let value = b"value";
 
-        let serialized = Heap::serialize(key, value);
-        let deserialized = Heap::deserialize(&serialized).unwrap();
+        let serialized = HeapTuple::from(key, value).serialize();
+        let deserialized = HeapTuple::deserialize(&serialized).unwrap();
 
         assert_eq!(deserialized, HeapTuple::from(key, value),);
     }
@@ -310,7 +319,7 @@ mod test {
         let mut heap_file = tempfile().unwrap();
 
         heap_file
-            .write_all(&Heap::serialize(b"key", b"value"))
+            .write_all(&HeapTuple::from(b"key", b"value").serialize())
             .unwrap();
         heap_file.rewind().unwrap();
 
